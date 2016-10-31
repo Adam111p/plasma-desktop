@@ -48,7 +48,7 @@ MouseArea {
     Accessible.role: Accessible.MenuItem
     Accessible.name: model.display
 
-    acceptedButtons: Qt.LeftButton | Qt.RightButton
+    acceptedButtons: root.visible ? (Qt.LeftButton | Qt.RightButton) : Qt.NoButton
 
     onPressed: {
         if (mouse.buttons & Qt.RightButton) {
@@ -62,6 +62,7 @@ MouseArea {
 
     onReleased: {
         if (pressed && GridView.view.currentItem == item) {
+            hoverArea.hoverEnabled = false;
             GridView.view.model.trigger(index, "", null);
             root.toggle();
         }
@@ -107,8 +108,10 @@ MouseArea {
         width: iconSize
         height: width
 
+        colorGroup: PlasmaCore.Theme.ComplementaryColorGroup
+
         animated: false
-        usesPlasmaTheme: false
+        usesPlasmaTheme: view.usesPlasmaTheme
 
         source: model.decoration
     }

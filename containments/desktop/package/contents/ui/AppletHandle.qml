@@ -52,7 +52,7 @@ KQuickControlsAddons.MouseEventListener {
     signal moveFinished
 
     transform: Translate {
-        x: handleMerged ? 0 : controlsOpacity * appletHandle.width
+        x: (handleMerged ? 0 : controlsOpacity * appletHandle.width) * (appletHandle.LayoutMirroring.enabled ? -1 : 1)
     }
 
     PlasmaCore.FrameSvgItem {
@@ -124,20 +124,30 @@ KQuickControlsAddons.MouseEventListener {
                     appletContainer.clip = true
                 }
                 onPositionChanged: {
-                    appletItem.width = Math.max(appletItem.minimumWidth + appletHandle.width, appletItem.width + mouse.x-startX);
+                    var minimumWidth = appletItem.minimumWidth + appletHandle.width;
+                    var minimumHeight = appletItem.minimumHeight;
+
+                    var xDelta = startX - mouse.x;
+                    var yDelta = startY - mouse.y;
+
+                    if (LayoutMirroring.enabled) {
+                        var oldRight = appletItem.x + appletItem.width;
+                        appletItem.width = Math.max(minimumWidth, appletItem.width + xDelta);
+                        appletItem.x = oldRight - appletItem.width;
+                    } else {
+                        appletItem.width = Math.max(minimumWidth, appletItem.width - xDelta);
+                    }
 
                     var oldBottom = appletItem.y + appletItem.height;
-                    appletItem.height = Math.max(appletItem.minimumHeight, appletItem.height + startY-mouse.y)
+                    appletItem.height = Math.max(minimumHeight, appletItem.height + yDelta);
                     appletItem.y = oldBottom - appletItem.height;
                 }
                 onReleased: {
                     animationsEnabled = true
                     root.layoutManager.positionItem(appletItem)
                     root.layoutManager.save()
-                    root.layoutManager.setSpaceAvailable(appletItem.x, appletItem.y, widthAnimation.to, heightAnimation.to, false)
                     appletContainer.clip = false
                 }
-//                 Rectangle { color: "blue"; opacity: 0.4; visible: debug; anchors.fill: parent; }
             }
         }
         ActionButton {
@@ -220,7 +230,6 @@ KQuickControlsAddons.MouseEventListener {
 //                    print("saving...");
                     root.layoutManager.saveItem(appletItem);
                 }
-//                 Rectangle { color: "red"; opacity: 0.6; visible: debug; anchors.fill: parent; }
             }
         }
         ActionButton {
@@ -263,9 +272,7 @@ KQuickControlsAddons.MouseEventListener {
                 appletItem.z = appletItem.z + zoffset;
                 animationsEnabled = false
                 mouse.accepted = true
-                var x = Math.round(appletItem.x / root.layoutManager.cellSize.width) * root.layoutManager.cellSize.width
-                var y = Math.round(appletItem.y / root.layoutManager.cellSize.height) * root.layoutManager.cellSize.height
-                root.layoutManager.setSpaceAvailable(x, y, appletItem.width, appletItem.height, true)
+                root.layoutManager.setSpaceAvailable(appletItem.x, appletItem.y, appletItem.width, appletItem.height, true)
 
                 placeHolder.syncWithItem(appletItem)
                 placeHolderPaint.opacity = root.haloOpacity;

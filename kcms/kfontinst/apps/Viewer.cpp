@@ -24,19 +24,22 @@
 #include "config-workspace.h"
 #include "Viewer.h"
 #include "KfiConstants.h"
-#include <KCmdLineArgs>
-#include <k4aboutdata.h>
-#include <KUniqueApplication>
+#include <KAboutData>
+#include <KDBusService>
 #include <KPluginLoader>
 #include <KPluginFactory>
-#include <KFileDialog>
 #include <KStandardAction>
 #include <KActionCollection>
 #include <KShortcutsDialog>
 #include <KConfigGroup>
+#include <KSharedConfig>
 #include <KParts/BrowserExtension>
+#include <QApplication>
+#include <QFileDialog>
 #include <QUrl>
 #include <QAction>
+#include <QCommandLineParser>
+#include <QCommandLineOption>
 
 namespace KFI
 {
@@ -72,11 +75,18 @@ CViewer::CViewer()
 
 void CViewer::fileOpen()
 {
-    QUrl url(KFileDialog::getOpenUrl(QUrl(), "application/x-font-ttf application/x-font-otf "
-                                             "application/x-font-type1 "
-                                             "application/x-font-bdf application/x-font-pcf ",
-                                     this, i18n("Select Font to View")));
-    showUrl(url);
+    QFileDialog dlg(this, i18n("Select Font to View"));
+    dlg.setFileMode(QFileDialog::ExistingFile);
+    dlg.setMimeTypeFilters(QStringList() << "application/x-font-ttf"
+                                         << "application/x-font-otf"
+                                         << "application/x-font-type1"
+                                         << "application/x-font-bdf"
+                                         << "application/x-font-pcf");
+    if (dlg.exec() == QDialog::Accepted) {
+        QUrl url = dlg.selectedUrls().value(0);
+        if (url.isValid())
+            showUrl(url);
+    }
 }
 
 void CViewer::showUrl(const QUrl &url)
@@ -102,64 +112,65 @@ void CViewer::enableAction(const char *name, bool enable)
 
 
 
-class ViewerApplication : public KUniqueApplication
+class ViewerApplication : public QApplication
 {
-    public:
-
-#ifdef Q_WS_X11
-    ViewerApplication(Display *display, Qt::HANDLE visual, Qt::HANDLE colormap)
-        : KUniqueApplication(display,visual,colormap)
+public:
+    ViewerApplication(int &argc, char **argv)
+        : QApplication(argc, argv)
     {
-    }
-#endif
-
-    ViewerApplication() : KUniqueApplication()
-    {
+        cmdParser.addVersionOption();
+        cmdParser.addHelpOption();
+        cmdParser.addPositionalArgument(QLatin1String("[URL]"), i18n("URL to open"));
     }
 
-    int newInstance()
+    QCommandLineParser *parser() { return &cmdParser; }
+
+public Q_SLOTS:
+    void activate(const QStringList &args, const QString &workingDirectory)
     {
-        KCmdLineArgs *args(KCmdLineArgs::parsedArgs());
         KFI::CViewer *viewer=new KFI::CViewer;
-
         viewer->show();
-        if(args->count() > 0)
-        {
-            for (int i = 0; i < args->count(); ++i)
-            {
-                QUrl url(args->url(i));
 
-                if (i != 0)
-                {
+        if (!args.isEmpty()) {
+            cmdParser.process(args);
+            bool first = true;
+            foreach (const QString &arg, cmdParser.positionalArguments()) {
+                QUrl url(QUrl::fromUserInput(arg, workingDirectory));
+
+                if (!first) {
                     viewer=new KFI::CViewer;
                     viewer->show();
                 }
                 viewer->showUrl(url);
+                first = false;
             }
         }
-
-        return 0;
     }
+
+private:
+    QCommandLineParser cmdParser;
 };
 
 }
 
-static K4AboutData aboutData("kfontview", KFI_CATALOGUE, ki18n("Font Viewer"), WORKSPACE_VERSION_STRING, ki18n("Simple font viewer"),
-                             K4AboutData::License_GPL, ki18n("(C) Craig Drummond, 2004-2007"));
-
 int main(int argc, char **argv)
 {
-    KCmdLineArgs::init(argc, argv, &aboutData);
-    KCmdLineArgs::addTempFileOption();
+    KFI::ViewerApplication app(argc, argv);
 
-    KCmdLineOptions options;
-    options.add("+[URL]", ki18n("URL to open"));
-    KCmdLineArgs::addCmdLineOptions(options);
+    KLocalizedString::setApplicationDomain(KFI_CATALOGUE);
+    KAboutData aboutData("kfontview", i18n("Font Viewer"), WORKSPACE_VERSION_STRING, i18n("Simple font viewer"),
+                         KAboutLicense::GPL, i18n("(C) Craig Drummond, 2004-2007"));
+    KAboutData::setApplicationData(aboutData);
 
-    if (!KUniqueApplication::start())
-        exit(0);
+    QCommandLineParser *parser = app.parser();
+    aboutData.setupCommandLine(parser);
+    parser->process(app);
+    aboutData.processCommandLine(parser);
 
-    KFI::ViewerApplication app;
+    KDBusService dbusService(KDBusService::Unique);
+    QGuiApplication::setWindowIcon(QIcon::fromTheme("kfontview"));
+    app.activate(app.arguments(), QDir::currentPath());
+    QObject::connect(&dbusService, &KDBusService::activateRequested, &app, &KFI::ViewerApplication::activate);
 
     return app.exec();
 }

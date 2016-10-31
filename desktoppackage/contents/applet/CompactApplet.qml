@@ -99,7 +99,7 @@ PlasmaCore.ToolTipArea {
         id: expandedItem
         anchors.fill: parent
         imagePath: "widgets/tabbar"
-        visible: fromCurrentTheme
+        visible: fromCurrentTheme && opacity > 0
         prefix: {
             var prefix;
             switch (plasmoid.location) {
@@ -140,6 +140,11 @@ PlasmaCore.ToolTipArea {
         onTriggered: plasmoid.expanded = false
     }
 
+    Connections {
+        target: plasmoid
+        onContextualActionsAboutToShow: root.hideToolTip()
+    }
+
     PlasmaCore.Dialog {
         id: popupWindow
         objectName: "popupWindow"
@@ -154,6 +159,10 @@ PlasmaCore.ToolTipArea {
         //It's a MouseEventListener to get all the events, so the eventfilter will be able to catch them
         mainItem: MouseEventListener {
             id: appletParent
+
+            LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+            LayoutMirroring.childrenInherit: true
+
             Layout.minimumWidth: (fullRepresentation && fullRepresentation.Layout) ? fullRepresentation.Layout.minimumWidth : 0
             Layout.minimumHeight: (fullRepresentation && fullRepresentation.Layout) ? fullRepresentation.Layout.minimumHeight: 0
             Layout.maximumWidth: (fullRepresentation && fullRepresentation.Layout) ? fullRepresentation.Layout.maximumWidth : Infinity

@@ -67,7 +67,7 @@ class AppEntry : public AbstractEntry
         QString m_id;
         QString m_name;
         QString m_description;
-        QIcon m_icon;
+        mutable QIcon m_icon;
         KService::Ptr m_service;
         static MenuEntryEditor *m_menuEntryEditor;
 };
@@ -76,7 +76,7 @@ class AppGroupEntry : public AbstractGroupEntry
 {
     public:
         AppGroupEntry(AppsModel *parentModel, KServiceGroup::Ptr group,
-            bool flat, bool separators, int appNameFormat);
+            bool flat, bool sorted, bool separators, int appNameFormat);
 
         QIcon icon() const;
         QString name() const;
@@ -85,8 +85,8 @@ class AppGroupEntry : public AbstractGroupEntry
         AbstractModel *childModel() const;
 
     private:
-        QString m_name;
-        QIcon m_icon;
+        KServiceGroup::Ptr m_group;
+        mutable QIcon m_icon;
         QPointer<AbstractModel> m_childModel;
 };
 

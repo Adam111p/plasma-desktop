@@ -29,6 +29,8 @@ PlasmaCore.SvgItem {
         horizontalCenter: iconBox.horizontalCenter
     }
 
+    visible: parent.m.IsGroupParent === true
+
     states: [
         State {
             name: "top"

@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2013 by Eike Hein <hein@kde.org>                        *
+ *   Copyright (C) 2013-2016 by Eike Hein <hein@kde.org>                   *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,18 +21,15 @@
 #define BACKEND_H
 
 #include <QObject>
-#include <QPointer>
+#include <QRect>
 
-#include <groupmanager.h>
-#include <tasksmodel.h>
+#include <netwm.h>
 
+class QAction;
+class QActionGroup;
 class QQuickItem;
 class QQuickWindow;
-
-namespace TaskManager {
-    class BasicMenu;
-    class LauncherItem;
-}
+class QJsonArray;
 
 namespace KActivities {
     class Consumer;
@@ -42,98 +39,70 @@ class Backend : public QObject
 {
     Q_OBJECT
 
-    Q_PROPERTY(QObject* groupManager READ groupManager CONSTANT)
-    Q_PROPERTY(QObject* tasksModel READ tasksModel CONSTANT)
     Q_PROPERTY(QQuickItem* taskManagerItem READ taskManagerItem WRITE setTaskManagerItem NOTIFY taskManagerItemChanged)
     Q_PROPERTY(QQuickItem* toolTipItem READ toolTipItem WRITE setToolTipItem NOTIFY toolTipItemChanged)
-    Q_PROPERTY(bool anyTaskNeedsAttention READ anyTaskNeedsAttention)
-    Q_PROPERTY(bool showingContextMenu READ showingContextMenu NOTIFY showingContextMenuChanged)
     Q_PROPERTY(bool highlightWindows READ highlightWindows WRITE setHighlightWindows NOTIFY highlightWindowsChanged)
-    Q_PROPERTY(int groupingStrategy READ groupingStrategy WRITE setGroupingStrategy)
-    Q_PROPERTY(int sortingStrategy READ sortingStrategy WRITE setSortingStrategy)
-    Q_PROPERTY(QString launchers READ launchers WRITE setLaunchers NOTIFY launchersChanged)
 
     public:
         enum MiddleClickAction {
             None = 0,
             Close,
-            NewInstance
+            NewInstance,
+            ToggleMinimized
         };
-        Q_ENUMS(MiddleClickAction)
+
+        Q_ENUM(MiddleClickAction);
 
         Backend(QObject *parent = 0);
         ~Backend();
 
-        TaskManager::GroupManager *groupManager() const;
-        TaskManager::TasksModel *tasksModel() const;
-
-        QQuickItem* taskManagerItem() const;
+        QQuickItem *taskManagerItem() const;
         void setTaskManagerItem(QQuickItem *item);
 
-        QQuickItem* toolTipItem() const;
+        QQuickItem *toolTipItem() const;
         void setToolTipItem(QQuickItem *item);
-
-        bool anyTaskNeedsAttention() const;
-        bool showingContextMenu() const;
 
         bool highlightWindows() const;
         void setHighlightWindows(bool highlight);
 
-        int groupingStrategy() const;
-        void setGroupingStrategy(int groupingStrategy);
+        Q_INVOKABLE QVariantList jumpListActions(const QUrl &launcherUrl, QObject *parent);
+        Q_INVOKABLE QVariantList recentDocumentActions(const QUrl &launcherUrl, QObject *parent);
+        Q_INVOKABLE void setActionGroup(QAction *action) const;
 
-        int sortingStrategy() const;
-        void setSortingStrategy(int sortingStrategy);
+        Q_INVOKABLE QRect globalRect(QQuickItem *item) const;
 
-        QString launchers() const;
-        void setLaunchers(const QString& launchers);
+        Q_INVOKABLE void ungrabMouse(QQuickItem *item) const;
 
         Q_INVOKABLE bool canPresentWindows() const;
-        Q_INVOKABLE int numberOfDesktops() const;
-        Q_INVOKABLE int numberOfActivities() const;
+
+        Q_INVOKABLE bool isApplication(const QUrl &url) const;
+
+        Q_INVOKABLE QList<QUrl> jsonArrayToUrlList(const QJsonArray &array) const;
 
     public Q_SLOTS:
-        void activateItem(int id, bool toggle);
-        void activateWindow(int winId);
-        void closeByWinId(int winId);
-        void closeByItemId(int itemId);
-        void launchNewInstance(int id);
-        void itemContextMenu(QQuickItem *item, QObject *configAction);
-        void itemHovered(int id, bool hovered);
-        void windowHovered(int winId, bool hovered);
-        void itemMove(int id, int newIndex);
-        void itemGeometryChanged(QQuickItem *item, int id);
-        void presentWindows(int groupParentId);
-        void urlDropped(const QUrl &url);
-
-    private Q_SLOTS:
-        void handleJumpListAction() const;
-        void handleRecentDocumentAction() const;
-        void updateLaunchersCache();
-        void toolTipWindowChanged(QQuickWindow *window);
+        void presentWindows(const QVariant &winIds);
+        void windowsHovered(const QVariant &winIds, bool hovered);
 
     Q_SIGNALS:
-        void taskManagerItemChanged(QQuickItem*);
-        void toolTipItemChanged(QQuickItem*);
-        void showingContextMenuChanged();
-        void highlightWindowsChanged(bool);
-        void launchersChanged();
+        void taskManagerItemChanged() const;
+        void toolTipItemChanged() const;
+        void highlightWindowsChanged() const;
+        void addLauncher(const QUrl &url) const;
+
+    private Q_SLOTS:
+        void toolTipWindowChanged(QQuickWindow *window);
+        void handleJumpListAction() const;
+        void handleRecentDocumentAction() const;
 
     private:
-        void addJumpListActions(const QUrl &launcherUrl, TaskManager::BasicMenu *menu) const;
-        void addRecentDocumentActions(TaskManager::LauncherItem *launcher,
-            TaskManager::BasicMenu *menu) const;
         void updateWindowHighlight();
 
-        TaskManager::GroupManager *m_groupManager;
-        TaskManager::TasksModel *m_tasksModel;
-        QPointer<TaskManager::BasicMenu> m_contextMenu;
-        QQuickItem* m_taskManagerItem;
-        QQuickItem* m_toolTipItem;
+        QQuickItem *m_taskManagerItem;
+        QQuickItem *m_toolTipItem;
         WId m_panelWinId;
         bool m_highlightWindows;
         QList<WId> m_windowsToHighlight;
-        QString m_launchers;
+        QActionGroup *m_actionGroup;
         KActivities::Consumer *m_activitiesConsumer;
 };
 

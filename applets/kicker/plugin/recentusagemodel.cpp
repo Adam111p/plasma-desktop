@@ -172,7 +172,10 @@ QVariant RecentUsageModel::appData(const QString &resource, int role) const
     const QString storageId = resource.section(':', 1);
     KService::Ptr service = KService::serviceByStorageId(storageId);
 
-    if (!service || !service->isApplication()) {
+    QStringList allowedTypes({ QLatin1String("Service"), QLatin1String("Application") });
+
+    if (!service || !allowedTypes.contains(service->property(QLatin1String("Type")).toString())
+            || service->exec().isEmpty()) {
         return QVariant();
     }
 
@@ -273,7 +276,7 @@ bool RecentUsageModel::trigger(int row, const QString &actionId, const QVariant 
         const QString &resource = resourceAt(row);
 
         if (!resource.startsWith(QLatin1String("applications:"))) {
-            new KRun(QUrl(resource), 0);
+            new KRun(docData(resource, Kicker::UrlRole).toUrl(), 0);
             return true;
         }
 
@@ -292,8 +295,8 @@ bool RecentUsageModel::trigger(int row, const QString &actionId, const QVariant 
         }
 #endif
 
-        new KRun(QUrl::fromLocalFile(service->entryPath()), 0, true,
-            KStartupInfo::createNewStartupIdForTimestamp(timeStamp));
+        // TODO Once we depend on KDE Frameworks 5.24 and D1902 is merged, use KRun::runApplication instead
+        KRun::runService(*service, {}, nullptr, true, {}, KStartupInfo::createNewStartupIdForTimestamp(timeStamp));
 
         KActivities::ResourceInstance::notifyAccessed(QUrl("applications:" + storageId),
             "org.kde.plasma.kicker");

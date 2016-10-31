@@ -31,6 +31,7 @@ import org.kde.kquickcontrolsaddons 2.0
 import org.kde.plasma.private.kicker 0.1 as Kicker
 
 Item {
+    id: kickoff
 
     Plasmoid.switchWidth: units.gridUnit * 20
     Plasmoid.switchHeight: units.gridUnit * 30
@@ -39,64 +40,39 @@ Item {
 
     Plasmoid.icon: plasmoid.configuration.icon
 
-    property QtObject globalFavorites: rootModelFavorites
+    Plasmoid.compactRepresentation: MouseArea {
+        //AppletQuickItem expects a layout to exist
+        //setting even a default property forces it to be created
+        Layout.fillWidth: false
+        hoverEnabled: true
+        onClicked: plasmoid.expanded = !plasmoid.expanded
 
-    Kicker.AppsModel {
-        id: rootModel
+        DropArea {
+            id: compactDragArea
+            anchors.fill: parent
+        }
 
-        appletInterface: plasmoid
+        Timer {
+            id: expandOnDragTimer
+            interval: 250
+            running: compactDragArea.containsDrag
+            onTriggered: plasmoid.expanded = true
+        }
 
-        appNameFormat: plasmoid.configuration.showAppsByName ? 0 : 1
-        flat: false
-        showSeparators: false
-
-        favoritesModel: Kicker.FavoritesModel {
-            id: rootModelFavorites
-
-            Component.onCompleted: {
-                favorites = plasmoid.configuration.favorites;
-            }
+        PlasmaCore.IconItem {
+            anchors.fill: parent
+            source: plasmoid.icon
+            active: parent.containsMouse || compactDragArea.containsDrag
         }
     }
 
-    Connections {
-        target: globalFavorites
-
-        onFavoritesChanged: {
-            plasmoid.configuration.favorites = target.favorites;
-        }
-    }
-
-    Connections {
-        target: plasmoid.configuration
-
-        onFavoritesChanged: {
-            globalFavorites.favorites = plasmoid.configuration.favorites;
-        }
-    }
-
-    Kicker.RunnerModel {
-        id: runnerModel
-
-        appletInterface: plasmoid
-
-        runners: {
-            var runners = ["services", "places"];
-
-            if (plasmoid.configuration.useExtraRunners) {
-                runners = runners.concat(plasmoid.configuration.runners);
-            }
-            return runners;
-        }
-        mergeResults: true
-
-        favoritesModel: globalFavorites
-    }
+    property Item dragSource: null
 
     Kicker.DragHelper {
         id: dragHelper
 
         dragIconSize: units.iconSizes.medium
+        onDropped: kickoff.dragSource = null
     }
 
     Kicker.ProcessRunner {
@@ -108,6 +84,11 @@ Item {
     }
 
     Component.onCompleted: {
-        plasmoid.setAction("menuedit", i18n("Edit Applications..."));
+        if (plasmoid.hasOwnProperty("activationTogglesExpanded")) {
+            plasmoid.activationTogglesExpanded = true
+        }
+        if (plasmoid.immutability !== PlasmaCore.Types.SystemImmutable) {
+            plasmoid.setAction("menuedit", i18n("Edit Applications..."));
+        }
     }
 } // root

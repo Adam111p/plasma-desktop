@@ -37,8 +37,10 @@ Item {
     property alias cfg_maxStripes: maxStripes.value
     property alias cfg_groupingStrategy: groupingStrategy.currentIndex
     property alias cfg_middleClickAction: middleClickAction.currentIndex
+    property alias cfg_groupPopups: groupPopups.checked
     property alias cfg_onlyGroupWhenFull: onlyGroupWhenFull.checked
     property alias cfg_sortingStrategy: sortingStrategy.currentIndex
+    property alias cfg_separateLaunchers: separateLaunchers.checked
     property alias cfg_showOnlyCurrentScreen: showOnlyCurrentScreen.checked
     property alias cfg_showOnlyCurrentDesktop: showOnlyCurrentDesktop.checked
     property alias cfg_showOnlyCurrentActivity: showOnlyCurrentActivity.checked
@@ -112,7 +114,7 @@ Item {
                     ComboBox {
                         id: middleClickAction
                         Layout.fillWidth: true
-                        model: [i18nc("The click action", "None"), i18n("Close Window or Group"), i18n("New Instance")]
+                        model: [i18nc("The click action", "None"), i18n("Close Window or Group"), i18n("New Instance"), i18n("Minimize/Restore Window or Group")]
                     }
                 }
             }
@@ -141,9 +143,18 @@ Item {
                         model: [i18n("Do Not Sort"), i18n("Manually"), i18n("Alphabetically"), i18n("By Desktop"), i18n("By Activity")]
                     }
 
+                    CheckBox {
+                        id: separateLaunchers
+                        Layout.column: 1
+                        Layout.row: 1
+                        Layout.columnSpan: 2
+                        text: i18n("Keep launchers separate")
+                        enabled: sortingStrategy.currentIndex == 1
+                    }
+
                     Label {
                         Layout.fillWidth: true
-                        Layout.row: 1
+                        Layout.row: 2
                         Layout.column: 0
                         text: i18n("Grouping:")
                         horizontalAlignment: Text.AlignRight
@@ -151,18 +162,36 @@ Item {
 
                     ComboBox {
                         id: groupingStrategy
-                        Layout.row: 1
+                        Layout.row: 2
                         Layout.column: 1
                         Layout.fillWidth: true
                         model: [i18n("Do Not Group"), i18n("By Program Name")]
                     }
+
                     CheckBox {
-                        id: onlyGroupWhenFull
+                        id: groupPopups
                         Layout.column: 1
-                        Layout.row: 2
+                        Layout.row: 3
                         Layout.columnSpan: 2
-                        text: i18n("Only when the task manager is full")
+                        text: i18n("Open groups in popups")
                         enabled: groupingStrategy.currentIndex > 0
+                    }
+
+                    Item {
+                        width: childrenRect.width
+                        height: childrenRect.height
+
+                        Layout.column: 1
+                        Layout.row: 4
+                        Layout.columnSpan: 2
+
+                        CheckBox {
+                            id: onlyGroupWhenFull
+                            anchors.left: parent.left
+                            anchors.leftMargin: units.gridUnit
+                            text: i18n("Only group when the task manager is full")
+                            enabled: groupingStrategy.currentIndex > 0 && groupPopups.checked
+                        }
                     }
                 }
 

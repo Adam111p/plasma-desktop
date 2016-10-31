@@ -36,6 +36,7 @@ FocusScope {
     property bool dragEnabled: true
     property bool dropEnabled: false
     property bool showLabels: true
+    property alias usesPlasmaTheme: gridView.usesPlasmaTheme
 
     property int pressX: -1
     property int pressY: -1
@@ -163,6 +164,8 @@ FocusScope {
         }
 
         MouseEventListener {
+            id: hoverArea
+
             anchors.fill: parent
 
             hoverEnabled: true
@@ -213,6 +216,16 @@ FocusScope {
                 }
             }
 
+            Connections {
+                target: root
+
+                onVisibleChanged: {
+                    if (root.visible) {
+                        hoverArea.hoverEnabled = true;
+                    }
+                }
+            }
+
             Timer {
                 id: resetAnimationDurationTimer
 
@@ -235,6 +248,8 @@ FocusScope {
 
                 GridView {
                     id: gridView
+
+                    property bool usesPlasmaTheme: false
 
                     property bool animating: false
                     property int animationDuration: dropEnabled ? resetAnimationDurationTimer.interval : 0

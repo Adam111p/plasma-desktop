@@ -102,13 +102,13 @@ IconThemesConfig::IconThemesConfig(QWidget *parent)
   m_iconThemes->sortByColumn(0, Qt::AscendingOrder);
   connect(m_iconThemes, &QTreeWidget::currentItemChanged, this, &IconThemesConfig::themeSelected);
 
-  QPushButton *installButton=new QPushButton( QIcon::fromTheme(QStringLiteral("document-import")), i18n("Install Theme File..."), this);
+  QPushButton *installButton=new QPushButton( QIcon::fromTheme(QStringLiteral("document-import")), i18n("Install from File"), this);
   installButton->setObjectName( QStringLiteral("InstallNewTheme" ));
   installButton->setToolTip(i18n("Install a theme archive file you already have locally"));
   installButton->setWhatsThis(i18n("If you already have a theme archive locally, this button will unpack it and make it available for KDE applications"));
   connect(installButton, &QPushButton::clicked, this, &IconThemesConfig::installNewTheme);
 
-  QPushButton *newButton=new QPushButton( QIcon::fromTheme(QStringLiteral("get-hot-new-stuff")), i18n("Get New Themes..."), this);
+  QPushButton *newButton=new QPushButton( QIcon::fromTheme(QStringLiteral("get-hot-new-stuff")), i18n("Get new Theme"), this);
   newButton->setObjectName( QStringLiteral("GetNewTheme" ));
   newButton->setToolTip(i18n("Get new themes from the Internet"));
   newButton->setWhatsThis(i18n("You need to be connected to the Internet to use this action. A dialog will display a list of themes from the http://www.kde.org website. Clicking the Install button associated with a theme will install this theme locally."));
@@ -120,14 +120,12 @@ IconThemesConfig::IconThemesConfig(QWidget *parent)
   m_removeButton->setWhatsThis(i18n("This will remove the selected theme from your disk."));
   connect(m_removeButton, &QPushButton::clicked, this, &IconThemesConfig::removeSelectedTheme);
 
-  topLayout->addWidget(
-	new QLabel(i18n("Select the icon theme you want to use:"), this));
   topLayout->addWidget(m_preview);
   topLayout->addWidget(m_iconThemes);
   QHBoxLayout *lg = new QHBoxLayout();
   lg->addWidget(newButton);
-  lg->addStretch(0);
   lg->addWidget(installButton);
+  lg->addStretch(0);
   lg->addWidget(m_removeButton);
   topLayout->addLayout(lg);
 

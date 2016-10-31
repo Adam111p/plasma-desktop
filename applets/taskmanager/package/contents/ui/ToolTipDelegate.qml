@@ -32,27 +32,62 @@ Column {
     id: tooltipContentItem
 
     property Item toolTip
+    property var parentIndex
     property var windows
     property string mainText
     property string subText
     property variant icon
     property url launcherUrl
+    property bool group: (windows !== undefined && windows.length > 1)
+
+    readonly property string mprisSourceName: mpris2Source.sourceNameForLauncherUrl(launcherUrl)
+    readonly property bool hasPlayer: !!mprisSourceName && !!playerData
+
+    readonly property var playerData: mpris2Source.data[mprisSourceName]
+    readonly property bool playing: hasPlayer && playerData.PlaybackStatus === "Playing"
+    readonly property bool canControl: hasPlayer && playerData.CanControl
+    readonly property bool canGoBack: hasPlayer && playerData.CanGoPrevious
+    readonly property bool canGoNext: hasPlayer && playerData.CanGoNext
+    readonly property bool canRaise: hasPlayer && playerData.CanRaise
+    readonly property var currentMetadata: hasPlayer ? playerData.Metadata : ({})
+
+    readonly property string track: {
+        var xesamTitle = currentMetadata["xesam:title"]
+        if (xesamTitle) {
+            return xesamTitle
+        }
+        // if no track title is given, print out the file name
+        var xesamUrl = currentMetadata["xesam:url"] ? currentMetadata["xesam:url"].toString() : ""
+        if (!xesamUrl) {
+            return ""
+        }
+        var lastSlashPos = xesamUrl.lastIndexOf('/')
+        if (lastSlashPos < 0) {
+            return ""
+        }
+        var lastUrlPart = xesamUrl.substring(lastSlashPos + 1)
+        return decodeURIComponent(lastUrlPart)
+    }
+    readonly property string artist: currentMetadata["xesam:artist"] || ""
+    readonly property string albumArt: currentMetadata["mpris:artUrl"] || ""
 
     readonly property int thumbnailWidth: units.gridUnit * 15
     readonly property int thumbnailHeight: units.gridUnit * 10
 
     property int preferredTextWidth: theme.mSize(theme.defaultFont).width * 30
-    property int _s: units.largeSpacing / 2
 
-    Layout.minimumWidth: Math.max(thumbnailWidth, windowRow.width, appLabelRow.width) + _s
-    Layout.minimumHeight: childrenRect.height
+    Layout.minimumWidth: Math.max(thumbnailWidth, windowRow.width, appLabelRow.width) + units.largeSpacing / 2
+    Layout.minimumHeight: childrenRect.height + units.largeSpacing
     Layout.maximumWidth: Layout.minimumWidth
     Layout.maximumHeight: Layout.minimumHeight
 
-    spacing: _s
+    LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+    LayoutMirroring.childrenInherit: true
+
+    spacing: units.largeSpacing / 2
 
     states: State {
-        when: mpris2Source.hasPlayer
+        when: tooltipContentItem.hasPlayer
 
         PropertyChanges {
             target: thumbnailSourceItem
@@ -66,71 +101,8 @@ Column {
         }
         PropertyChanges {
             target: playerControlsRow
-            visible: mpris2Source.hasPlayer
+            visible: true
         }
-    }
-
-    PlasmaCore.DataSource {
-        id: mpris2Source
-        readonly property string current: {
-            var split = launcherUrl.toString().split('/')
-            var appName = split[split.length - 1].replace(".desktop", "")
-            return appName
-        }
-        readonly property bool hasPlayer: sources.indexOf(current) > -1
-
-        readonly property bool playing: hasPlayer && data[current].PlaybackStatus === "Playing"
-        readonly property bool canControl: hasPlayer && data[current].CanControl
-        readonly property bool canGoBack: hasPlayer && data[current].CanGoPrevious
-        readonly property bool canGoNext: hasPlayer && data[current].CanGoNext
-        readonly property bool canRaise: hasPlayer && data[current].CanRaise
-
-        readonly property var currentMetadata: hasPlayer ? data[current].Metadata : ({})
-
-        readonly property string track: {
-            var xesamTitle = currentMetadata["xesam:title"]
-            if (xesamTitle) {
-                return xesamTitle
-            }
-            // if no track title is given, print out the file name
-            var xesamUrl = currentMetadata["xesam:url"] ? currentMetadata["xesam:url"].toString() : ""
-            if (!xesamUrl) {
-                return ""
-            }
-            var lastSlashPos = xesamUrl.lastIndexOf('/')
-            if (lastSlashPos < 0) {
-                return ""
-            }
-            var lastUrlPart = xesamUrl.substring(lastSlashPos + 1)
-            return decodeURIComponent(lastUrlPart)
-        }
-        readonly property string artist: currentMetadata["xesam:artist"] || ""
-        readonly property string albumArt: currentMetadata["mpris:artUrl"] || ""
-
-        function goPrevious() {
-            startOperation("Previous")
-        }
-
-        function goNext() {
-            startOperation("Next")
-        }
-
-        function playPause() {
-            startOperation("PlayPause")
-        }
-
-        function raise() {
-            startOperation("Raise")
-        }
-
-        function startOperation(op) {
-            var service = mpris2Source.serviceForSource(current)
-            var operation = service.operationDescription(op)
-            return service.startOperationCall(operation)
-        }
-
-        engine: "mpris2"
-        connectedSources: current
     }
 
     Item {
@@ -163,8 +135,6 @@ Column {
 
                 Row {
                     id: windowRow
-                    width: childrenRect.width
-                    height: childrenRect.height
                     spacing: units.largeSpacing
 
                     Repeater {
@@ -173,8 +143,6 @@ Column {
                         PlasmaCore.WindowThumbnail {
                             id: windowThumbnail
 
-                            y: -s
-
                             width: thumbnailWidth
                             height: thumbnailHeight
 
@@ -182,7 +150,8 @@ Column {
 
                             ToolTipWindowMouseArea {
                                 anchors.fill: parent
-                                winId: parent.winId
+                                modelIndex: tasksModel.makeModelIndex(parentIndex, group ? index : -1)
+                                winId: modelData
                                 thumbnailItem: parent
                             }
                         }
@@ -200,13 +169,14 @@ Column {
                 height: thumbnailHeight
                 sourceSize: Qt.size(thumbnailWidth, thumbnailHeight)
                 asynchronous: true
-                source: mpris2Source.albumArt
+                source: albumArt
                 fillMode: Image.PreserveAspectCrop
                 visible: available
 
                 ToolTipWindowMouseArea {
                     anchors.fill: parent
-                    winId: windows[0] || 0
+                    modelIndex: tasksModel.makeModelIndex(parentIndex, group ? index : -1)
+                    winId: windows != undefined ? (windows[0] || 0) : 0
                 }
             }
 
@@ -217,8 +187,8 @@ Column {
                 height: thumbnailHeight
 
                 // if there's no window associated with this task, we might still be able to raise the player
-                visible: !windows[0] && mpris2Source.canRaise
-                onClicked: mpris2Source.raise()
+                visible: windows == undefined || !windows[0] && canRaise
+                onClicked: mpris2Source.raise(mprisSourceName)
 
                 PlasmaCore.IconItem {
                     anchors.fill: parent
@@ -268,7 +238,7 @@ Column {
             }
             width: thumbnailWidth
             spacing: 0
-            enabled: mpris2Source.canControl
+            enabled: canControl
             visible: false
 
             ColumnLayout {
@@ -280,7 +250,7 @@ Column {
                     level: 4
                     wrapMode: Text.NoWrap
                     elide: Text.ElideRight
-                    text: mpris2Source.track || ""
+                    text: track || ""
                 }
 
                 PlasmaExtras.Heading {
@@ -288,52 +258,53 @@ Column {
                     level: 5
                     wrapMode: Text.NoWrap
                     elide: Text.ElideRight
-                    text: mpris2Source.artist || ""
+                    text: artist || ""
                 }
             }
 
             PlasmaComponents.ToolButton {
-                enabled: mpris2Source.canGoBack
-                iconName: "media-skip-backward"
-                tooltip: i18nc("@action:button Go to previous song", "Previous")
+                enabled: canGoBack
+                iconName: LayoutMirroring.enabled ? "media-skip-forward" : "media-skip-backward"
+                tooltip: i18nc("Go to previous song", "Previous")
                 Accessible.name: tooltip
-                onClicked: mpris2Source.goPrevious()
+                onClicked: mpris2Source.goPrevious(mprisSourceName)
             }
 
             PlasmaComponents.ToolButton {
                 Layout.fillHeight: true
                 Layout.preferredWidth: height // make this button bigger
-                iconName: mpris2Source.playing ? "media-playback-pause" : "media-playback-start"
-                tooltip: mpris2Source.playing ? i18nc("@action:button Pause player", "Pause") : i18nc("Start player", "Play")
+                iconName: playing ? "media-playback-pause" : "media-playback-start"
+                tooltip: playing ? i18nc("Pause player", "Pause") : i18nc("Start player", "Play")
                 Accessible.name: tooltip
-                onClicked: mpris2Source.playPause()
+                onClicked: mpris2Source.playPause(mprisSourceName)
             }
 
             PlasmaComponents.ToolButton {
-                enabled: mpris2Source.canGoNext
-                iconName: "media-skip-forward"
-                tooltip: i18nc("@action:button Go to next song", "Next")
+                enabled: canGoNext
+                iconName: LayoutMirroring.enabled ? "media-skip-backward" : "media-skip-forward"
+                tooltip: i18nc("Go to next song", "Next")
                 Accessible.name: tooltip
-                onClicked: mpris2Source.goNext()
+                onClicked: mpris2Source.goNext(mprisSourceName)
             }
         }
     }
 
     Row {
         id: appLabelRow
-        width: childrenRect.width + _s
-        height: childrenRect.height + units.largeSpacing
+        anchors.left: parent.left
         spacing: units.largeSpacing
 
         Item {
             id: imageContainer
             width: tooltipIcon.width
             height: tooltipIcon.height
-            y: _s
 
             PlasmaCore.IconItem {
                 id: tooltipIcon
-                x: _s
+                anchors {
+                    left: parent.left
+                    leftMargin: units.largeSpacing / 2
+                }
                 width: units.iconSizes.desktop
                 height: width
                 animated: false
@@ -344,7 +315,7 @@ Column {
 
         Column {
             id: mainColumn
-            y: _s
+            spacing: units.smallSpacing
 
             //This instance is purely for metrics
             PlasmaExtras.Heading {
@@ -358,14 +329,20 @@ Column {
                 id: tooltipMaintext
                 level: 3
                 width: Math.min(tooltipMaintextPlaceholder.width, preferredTextWidth)
+                height: undefined // unset stupid PlasmaComponents.Label default height
                 //width: 400
                 elide: Text.ElideRight
+                wrapMode: Text.WordWrap
+                // if there's no subtext allow two lines of window title
+                maximumLineCount: tooltipSubtext.visible ? 1 : 2
+                lineHeight: 0.95
                 text: mainText
                 textFormat: Text.PlainText
             }
             PlasmaComponents.Label {
                 id: tooltipSubtext
                 width: tooltipContentItem.preferredTextWidth
+                height: Math.min(theme.mSize(theme.defaultFont), contentHeight)
                 wrapMode: Text.WordWrap
                 text: subText
                 textFormat: Text.PlainText

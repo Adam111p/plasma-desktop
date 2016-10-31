@@ -22,6 +22,7 @@
  */
 
 #include "Misc.h"
+#include "config-paths.h"
 #include <QtCore/QSet>
 #include <QtCore/QMap>
 #include <QtCore/QVector>
@@ -32,8 +33,7 @@
 #include <QtCore/QTextStream>
 #include <QtCore/QProcess>
 #include <QtCore/QTemporaryFile>
-#include <KStandardDirs>
-#include <kde_file.h>
+#include <QtCore/QStandardPaths>
 #include <unistd.h>
 #include <ctype.h>
 
@@ -114,13 +114,16 @@ QString getFile(const QString &f)
 
 bool createDir(const QString &dir)
 {
+    if (!QDir().mkpath(dir))
+        return false;
     //
-    // Clear any umask before dir is created
+    // Clear any umask before setting dir perms
     mode_t oldMask(umask(0000));
-    bool   status(KStandardDirs::makeDir(dir, DIR_PERMS));
+    const QByteArray d = QFile::encodeName(dir);
+    ::chmod(d.constData(), DIR_PERMS);
     // Reset umask
     ::umask(oldMask);
-    return status;
+    return true;
 }
 
 void setFilePerms(const QByteArray &f)
@@ -219,18 +222,18 @@ void getAssociatedFiles(const QString &path, QStringList &files, bool afmAndPfm)
 
 time_t getTimeStamp(const QString &item)
 {
-    KDE_struct_stat info;
+    QT_STATBUF info;
 
-    return !item.isEmpty() && 0==KDE_lstat(QFile::encodeName(item), &info) ? info.st_mtime : 0;
+    return !item.isEmpty() && 0==QT_LSTAT(QFile::encodeName(item), &info) ? info.st_mtime : 0;
 }
 
 
 bool check(const QString &path, bool file, bool checkW)
 { 
-    KDE_struct_stat info;
+    QT_STATBUF info;
     QByteArray      pathC(QFile::encodeName(path));
 
-    return 0==KDE_lstat(pathC, &info) &&
+    return 0==QT_LSTAT(pathC, &info) &&
            (file ? (S_ISREG(info.st_mode) || S_ISLNK(info.st_mode))
                  : S_ISDIR(info.st_mode)) &&
            (!checkW || 0==::access(pathC, W_OK));
@@ -475,8 +478,12 @@ QString app(const QString &name, const char *path)
 {
     static QMap<QString, QString> apps;
     
-    if(!apps.contains(name))
-        apps[name]=KStandardDirs::findExe(name, path ? KStandardDirs::installPath(path) : QString());
+    if(!apps.contains(name)) {
+        QStringList installPaths;
+        if (qstrcmp(path, "libexec") == 0)
+            installPaths.append(KFONTINST_LIBEXEC_DIR);
+        apps[name] = QStandardPaths::findExecutable(name, installPaths);
+    }
     return apps[name];
 }
 

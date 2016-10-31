@@ -1,15 +1,15 @@
 add_definitions(-DTRANSLATION_DOMAIN=\"kcmkeyboard\")
 
-option(HAVE_XINPUT "X11/XCB XInput" OFF)
+option(HAVE_XINPUT "X11 XInput" OFF)
 option(HAVE_UDEV "UDev" OFF)
 option(NEW_GEOMETRY "Keyboard geometry preview" OFF)
 
-if (X11_Xinput_FOUND AND XCB_XINPUT_FOUND)
+if (X11_Xinput_FOUND)
     set(HAVE_XINPUT ON)
 elseif (UDEV_FOUND)
     set(HAVE_UDEV ON)
 else()
-    message(STATUS "X11/XCB XInput and UDev is not found, either is required to keep layouts with keyboard hotplugging")
+    message(STATUS "X11 XInput and UDev is not found, either is required to keep layouts with keyboard hotplugging")
 endif()
 
 
@@ -43,7 +43,7 @@ ecm_qt_declare_logging_category(kded_keyboard_SRCS
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 add_library(kded_keyboard MODULE ${kded_keyboard_SRCS})
 set_target_properties(kded_keyboard PROPERTIES OUTPUT_NAME keyboard)
-kcoreaddons_desktop_to_json(kded_keyboard keyboard.desktop)
+kcoreaddons_desktop_to_json(kded_keyboard keyboard.desktop SERVICE_TYPES kdedmodule.desktop)
 
 target_link_libraries(kded_keyboard
     Qt5::Concurrent

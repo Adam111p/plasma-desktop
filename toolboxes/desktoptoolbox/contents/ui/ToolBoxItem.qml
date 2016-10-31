@@ -94,13 +94,16 @@ ListView {
             })
         }
 
-        model.push({
-            text: i18nd("plasma_toolbox_org.kde.desktoptoolbox", "Leave"),
-            icon: "system-log-out",
-            visible: true,
-            enabled: true,
-            operation: "requestShutDown" // cannot put function() into a model :(
-        })
+        if (dataEngine.data["Sleep States"].Logout) {
+            model.push({
+                text: i18nd("plasma_toolbox_org.kde.desktoptoolbox", "Leave"),
+                icon: "system-log-out",
+                visible: true,
+                enabled: true,
+                operation: "requestShutDown" // cannot put function() into a model :(
+            })
+        }
+
         return model
     }
 
@@ -115,12 +118,12 @@ ListView {
         onExited: menu.currentIndex = -1
 
         onClicked: {
+            toolBoxLoader.item.visible = false
             if (modelData.operation) {
                 performOperation(modelData.operation)
             } else {
                 modelData.trigger()
             }
-            toolBoxLoader.item.visible = false
         }
 
         Accessible.role: Accessible.MenuItem
@@ -137,8 +140,8 @@ ListView {
             spacing: units.smallSpacing
 
             PlasmaCore.IconItem {
-                width: units.iconSizes.smallMedium
-                height: width
+                implicitWidth: units.iconSizes.smallMedium
+                implicitHeight: implicitWidth
                 source: modelData.icon
                 Accessible.ignored: true
             }

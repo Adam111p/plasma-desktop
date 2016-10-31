@@ -2,9 +2,9 @@ add_definitions(-DTRANSLATION_DOMAIN=\"plasma_applet_org.kde.plasma.pager\")
 plasma_install_package(package org.kde.plasma.pager)
 
 set(pager_SRCS
-    plugin/model.cpp
-    plugin/pager.cpp
-    plugin/pagerplugin.cpp)
+    plugin/pagermodel.cpp
+    plugin/pagerplugin.cpp
+    plugin/windowmodel.cpp)
 
 add_library(pagerplugin SHARED ${pager_SRCS})
 
@@ -14,11 +14,12 @@ target_link_libraries(pagerplugin
                       KF5::Plasma
                       KF5::Activities
                       KF5::KDELibs4Support
+                      PW::LibTaskManager
                       Qt5::Core
+                      Qt5::DBus
                       Qt5::Qml
                       Qt5::Quick
-                      Qt5::DBus
-                      PW::LibTaskManager)
+                      Qt5::DBus)
 
 if (X11_FOUND)
     target_link_libraries(pagerplugin Qt5::X11Extras)

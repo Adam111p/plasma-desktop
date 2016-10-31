@@ -17,6 +17,7 @@
  */
 
 import QtQuick 2.0
+import QtQuick.Controls 1.1 as QQC
 import QtQuick.Layouts 1.0
 import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.plasma.core 2.0 as PlasmaCore
@@ -32,6 +33,23 @@ Item {
     readonly property string addSpacerButtonText: i18nd("plasma_shell_org.kde.plasma.desktop", "Add Spacer")
     readonly property string settingsButtonText: i18nd("plasma_shell_org.kde.plasma.desktop", "More Settings...")
 
+    QQC.Action {
+        shortcut: "Escape"
+        onTriggered: {
+            // avoid leaving the panel in an inconsistent state when escaping while dragging it
+            // "checked" means "pressed" in this case, we abuse that propery to make the button look pressed
+            if (edgeHandle.checked || sizeHandle.checked) {
+                return
+            }
+
+            if (contextMenuLoader.opened) {
+                contextMenuLoader.close()
+            } else {
+                configDialog.close()
+            }
+        }
+    }
+
     GridLayout {
         id: row
         columns: dialogRoot.vertical ? 1 : 2
@@ -42,10 +60,12 @@ Item {
         columnSpacing: units.smallSpacing
 
         EdgeHandle {
-          Layout.alignment: Qt.AlignHCenter
+            id: edgeHandle
+            Layout.alignment: Qt.AlignHCenter
         }
         SizeHandle {
-          Layout.alignment: Qt.AlignHCenter
+            id: sizeHandle
+            Layout.alignment: Qt.AlignHCenter
         }
     }
 

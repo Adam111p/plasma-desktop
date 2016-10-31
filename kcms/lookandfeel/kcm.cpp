@@ -67,12 +67,14 @@ KCMLookandFeel::KCMLookandFeel(QObject* parent, const QVariantList& args)
     , m_applyCursors(true)
     , m_applyWindowSwitcher(true)
     , m_applyDesktopSwitcher(true)
+    , m_resetDefaultLayout(false)
 {
     //This flag seems to be needed in order for QQuickWidget to work
     //see https://bugreports.qt-project.org/browse/QTBUG-40765
     //also, it seems to work only if set in the kcm, not in the systemsettings' main
     qApp->setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
     qmlRegisterType<QStandardItemModel>();
+    qmlRegisterType<KCMLookandFeel>();
     KAboutData* about = new KAboutData(QStringLiteral("kcm_lookandfeel"), i18n("Configure Look and Feel details"),
                                        QStringLiteral("0.1"), QString(), KAboutLicense::LGPL);
     about->addAuthor(i18n("Marco Martin"), QString(), QStringLiteral("mart@kde.org"));
@@ -83,6 +85,7 @@ KCMLookandFeel::KCMLookandFeel(QObject* parent, const QVariantList& args)
     QHash<int, QByteArray> roles = m_model->roleNames();
     roles[PluginNameRole] = "pluginName";
     roles[ScreenhotRole] = "screenshot";
+    roles[FullScreenPreviewRole] = "fullScreenPreview";
     roles[HasSplashRole] = "hasSplash";
     roles[HasLockScreenRole] = "hasLockScreen";
     roles[HasRunCommandRole] = "hasRunCommand";
@@ -102,6 +105,15 @@ KCMLookandFeel::~KCMLookandFeel()
 {
 }
 
+void KCMLookandFeel::getNewStuff()
+{
+    if (!m_newStuffDialog) {
+        m_newStuffDialog = new KNS3::DownloadDialog( QLatin1String("lookandfeel.knsrc") );
+        m_newStuffDialog.data()->setWindowTitle(i18n("Download New Look And Feel Packages"));
+        connect(m_newStuffDialog.data(), &KNS3::DownloadDialog::accepted, this,  &KCMLookandFeel::load);
+    }
+    m_newStuffDialog.data()->show();
+}
 
 QStandardItemModel *KCMLookandFeel::lookAndFeelModel()
 {
@@ -175,7 +187,8 @@ void KCMLookandFeel::load()
         }
         QStandardItem* row = new QStandardItem(pkg.metadata().name());
         row->setData(pkg.metadata().pluginName(), PluginNameRole);
-        row->setData(pkg.filePath("previews", QStringLiteral("preview.png")), ScreenhotRole);
+        row->setData(pkg.filePath("preview"), ScreenhotRole);
+        row->setData(pkg.filePath("fullscreenpreview"), FullScreenPreviewRole);
 
         //What the package provides
         row->setData(!pkg.filePath("splashmainscript").isEmpty(), HasSplashRole);
@@ -230,6 +243,18 @@ void KCMLookandFeel::save()
     }
 
     m_configGroup.writeEntry("LookAndFeelPackage", m_selectedPlugin);
+
+    QDBusMessage message;
+    if (m_resetDefaultLayout) {
+        message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/PlasmaShell"),
+                                                   QStringLiteral("org.kde.PlasmaShell"), QStringLiteral("loadLookAndFeelDefaultLayout"));
+
+        QList<QVariant> args;
+        args << m_selectedPlugin;
+        message.setArguments(args);
+
+        QDBusConnection::sessionBus().call(message, QDBus::NoBlock);
+    }
 
     if (!package.filePath("defaults").isEmpty()) {
         KSharedConfigPtr conf = KSharedConfig::openConfig(package.filePath("defaults"));
@@ -672,5 +697,23 @@ bool KCMLookandFeel::applyDesktopSwitcher() const
 {
     return m_applyDesktopSwitcher;
 }
+
+void KCMLookandFeel::setResetDefaultLayout(bool reset)
+{
+    if (m_resetDefaultLayout == reset) {
+        return;
+    }
+    m_resetDefaultLayout = reset;
+    emit resetDefaultLayoutChanged();
+    if (reset) {
+        setNeedsSave(true);
+    }
+}
+
+bool KCMLookandFeel::resetDefaultLayout() const
+{
+    return m_resetDefaultLayout;
+}
+
 
 #include "kcm.moc"

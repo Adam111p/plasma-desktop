@@ -19,7 +19,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-import QtQuick 2.0
+import QtQuick 2.4
 import QtQuick.Layouts 1.1
 
 import org.kde.plasma.plasmoid 2.0
@@ -31,6 +31,7 @@ import org.kde.kquickcontrolsaddons 2.0 as KQuickControlsAddons
 import org.kde.private.desktopcontainment.desktop 0.1 as Desktop
 
 import "LayoutManager.js" as LayoutManager
+import "FolderTools.js" as FolderTools
 
 DragDrop.DropArea {
     id: root
@@ -46,15 +47,18 @@ DragDrop.DropArea {
     Layout.preferredHeight: isPopup ? preferredHeight(false) : 0
     Plasmoid.switchHeight: preferredHeight(true)
 
+    LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+    LayoutMirroring.childrenInherit: true
+
     property bool isFolder: (plasmoid.pluginName == "org.kde.plasma.folder")
     property bool isContainment: ("containmentType" in plasmoid)
     property bool isPopup: (plasmoid.location != PlasmaCore.Types.Floating)
     property bool useListViewMode: isPopup && plasmoid.configuration.viewMode === 0
 
+    property Component appletAppearanceComponent
     property Item toolBox
     property var layoutManager: LayoutManager
 
-    property bool debug: false
     property int handleDelay: 800
     property real haloOpacity: 0.5
 
@@ -73,19 +77,32 @@ DragDrop.DropArea {
     onIconHeightChanged: updateGridSize()
 
     anchors {
-        leftMargin: plasmoid.availableScreenRect ? plasmoid.availableScreenRect.x : 0
-        topMargin: plasmoid.availableScreenRect ? plasmoid.availableScreenRect.y : 0
+        leftMargin: (isContainment && plasmoid.availableScreenRect) ? plasmoid.availableScreenRect.x : 0
+        topMargin: (isContainment && plasmoid.availableScreenRect) ? plasmoid.availableScreenRect.y : 0
 
         // Don't apply the right margin if the folderView is in column mode and not overflowing.
         // In this way, the last column remains droppable even if a small part of the icon is behind a panel.
         rightMargin: folderViewLayer.ready && (folderViewLayer.view.overflowing  || folderViewLayer.view.flow == GridView.FlowLeftToRight)
-            && plasmoid.availableScreenRect && parent
+            && (isContainment && plasmoid.availableScreenRect) && parent
             ? parent.width - (plasmoid.availableScreenRect.x + plasmoid.availableScreenRect.width) : 0
 
         // Same mechanism as the right margin but applied here to the bottom when the folderView is in row mode.
         bottomMargin: folderViewLayer.ready && (folderViewLayer.view.overflowing || folderViewLayer.view.flow == GridView.FlowTopToBottom)
-            && plasmoid.availableScreenRect && parent
+            && (isContainment && plasmoid.availableScreenRect) && parent
             ? parent.height - (plasmoid.availableScreenRect.y + plasmoid.availableScreenRect.height) : 0
+    }
+
+    Behavior on anchors.topMargin {
+        NumberAnimation { duration: units.longDuration; easing.type: Easing.InOutQuad }
+    }
+    Behavior on anchors.leftMargin {
+        NumberAnimation { duration: units.longDuration; easing.type: Easing.InOutQuad }
+    }
+    Behavior on anchors.rightMargin {
+        NumberAnimation { duration: units.longDuration; easing.type: Easing.InOutQuad }
+    }
+    Behavior on anchors.bottomMargin {
+        NumberAnimation { duration: units.longDuration; easing.type: Easing.InOutQuad }
     }
 
     function updateGridSize()
@@ -106,19 +123,25 @@ DragDrop.DropArea {
     }
 
     function addApplet(applet, x, y) {
-        var component = Qt.createComponent("AppletAppearance.qml");
-        var e = component.errorString();
-        if (e != "") {
-            print("Error loading AppletAppearance.qml: " + component.errorString());
+        if (!appletAppearanceComponent) {
+            appletAppearanceComponent = Qt.createComponent("AppletAppearance.qml");
         }
 
-        var container = component.createObject(resultsFlow)
+        if (appletAppearanceComponent.status !== Component.Ready) {
+            console.warn("Error loading AppletAppearance.qml:", appletAppearanceComponent.errorString());
+            return;
+        }
+
+        var category = "Applet-" + applet.id;
+
+        var container = appletAppearanceComponent.createObject(resultsFlow, {
+            category: category
+        });
 
         applet.parent = container
         applet.visible = true;
 
-        container.category = "Applet-" + applet.id;
-        var config = LayoutManager.itemsConfig[container.category];
+        var config = LayoutManager.itemsConfig[category];
 
         // We have it in the config.
         if (config !== undefined && config.width !== undefined &&
@@ -214,8 +237,13 @@ DragDrop.DropArea {
         return height;
     }
 
+    function isDrag(fromX, fromY, toX, toY) {
+        var length = Math.abs(fromX - toX) + Math.abs(fromY - toY);
+        return length >= Qt.styleHints.startDragDistance;
+    }
+
     onDragEnter: {
-        if (isContainment && plasmoid.immutable) {
+        if (isContainment && plasmoid.immutable && !(isFolder && FolderTools.isFileDrag(event))) {
             event.ignore();
         }
     }
@@ -225,11 +253,8 @@ DragDrop.DropArea {
         // (cf. QAbstractItemModel::flags() here, but DeclarativeDropArea currently
         // is currently incapable of rejecting drag events.
 
-        var arkService = event.mimeData.formats.indexOf("application/x-kde-ark-dndextract-service") != -1;
-        var arkPath = event.mimeData.formats.indexOf("application/x-kde-ark-dndextract-path") != -1;
-
         // Trigger autoscroll.
-        if (isFolder && (event.mimeData.hasUrls || (arkService && arkPath))) {
+        if (isFolder && FolderTools.isFileDrag(event)) {
             folderViewLayer.view.scrollLeft = (event.x < (units.largeSpacing * 3));
             folderViewLayer.view.scrollRight = (event.x > width - (units.largeSpacing * 3));
             folderViewLayer.view.scrollUp = (event.y < (units.largeSpacing * 3));
@@ -261,10 +286,7 @@ DragDrop.DropArea {
     }
 
     onDrop: {
-        var arkService = event.mimeData.formats.indexOf("application/x-kde-ark-dndextract-service") != -1;
-        var arkPath = event.mimeData.formats.indexOf("application/x-kde-ark-dndextract-path") != -1;
-
-        if (isFolder && (event.mimeData.hasUrls || (arkService && arkPath))) {
+        if (isFolder && FolderTools.isFileDrag(event)) {
             // Cancel autoscroll.
             folderViewLayer.view.scrollLeft = false;
             folderViewLayer.view.scrollRight = false;
@@ -372,10 +394,6 @@ DragDrop.DropArea {
     PlasmaCore.Svg {
         id: configIconsSvg
         imagePath: "widgets/configuration-icons"
-    }
-
-    Desktop.SystemSettings {
-        id: systemSettings
     }
 
     KQuickControlsAddons.EventGenerator {
@@ -529,7 +547,8 @@ DragDrop.DropArea {
             height: placeHolder.height
             z: 0
 
-            visible: false
+            opacity: 0
+            visible: opacity > 0
 
             Behavior on opacity {
                 NumberAnimation {
@@ -545,13 +564,13 @@ DragDrop.DropArea {
             return;
         }
 
+        plasmoid.action("configure").text = i18n("Configure Desktop");
+
         // WORKAROUND: that's the only place where we can inject a sensible size.
         // if root has width defined, it will override the value we set before
         // the component completes
         root.width = plasmoid.width;
 
-        placeHolderPaint.opacity = 0;
-        placeHolderPaint.visible = true;
         LayoutManager.resultsFlow = resultsFlow;
         LayoutManager.plasmoid = plasmoid;
         updateGridSize();

@@ -29,11 +29,10 @@
 #include <QDomDocument>
 #include <QDomElement>
 #include <QDomNode>
-#include <KStandardDirs>
-#include <KSaveFile>
+#include <QStandardPaths>
+#include <QDebug>
+#include <QSaveFile>
 #include <KShell>
-#include <KDebug>
-#include <KGlobal>
 #include <fontconfig/fontconfig.h>
 #include "Folder.h"
 #include "FcConfig.h"
@@ -45,7 +44,7 @@
 #include "config-fontinst.h"
 
 #define DISABLED_FONTS "disabledfonts"
-#define KFI_DBUG kDebug() << time(0L)
+#define KFI_DBUG qDebug() << time(0L)
 
 namespace KFI
 {
@@ -94,7 +93,7 @@ void Folder::init(bool system, bool systemBus)
             itsDisabledCfg.name=QString::fromLatin1(KFI_ROOT_CFG_DIR)+fileName;
         else
         {
-            QString path=KGlobal::dirs()->localxdgconfdir();
+            QString path=QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QLatin1Char('/');
 
             if(!Misc::dExists(path))
                 Misc::createDir(path);
@@ -202,11 +201,11 @@ void Folder::saveDisabled()
         {
             KFI_DBUG << itsDisabledCfg.name;
 
-            KSaveFile file;
+            QSaveFile file;
 
             file.setFileName(itsDisabledCfg.name);
 
-            if(!file.open())
+            if (!file.open(QIODevice::WriteOnly))
             {
                 KFI_DBUG << "Exit - cant open save file";
                 qApp->exit(0);
@@ -224,7 +223,7 @@ void Folder::saveDisabled()
             str << "</" DISABLED_FONTS ">" << endl;
             str.flush();
 
-            if(!file.finalize())
+            if(!file.commit())
             {
                 KFI_DBUG << "Exit - cant finalize save file";
                 qApp->exit(0);

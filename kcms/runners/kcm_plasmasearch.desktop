@@ -1,6 +1,6 @@
 [Desktop Entry]
 Exec=kcmshell5 kcm_plasmasearch
-Icon=nepomuk
+Icon=plasma-search
 Type=Service
 
 X-KDE-ServiceTypes=KCModule
@@ -8,7 +8,7 @@ X-KDE-Library=kcm_plasmasearch
 X-KDE-ParentApp=kcontrol
 
 X-KDE-System-Settings-Parent-Category=search
-X-KDE-Weight=10
+X-KDE-Weight=20
 
 Name=Plasma Search
 Name[ar]=بحث بلازما
@@ -26,6 +26,7 @@ Name[et]=Plasma otsing
 Name[fi]=Plasma-haku
 Name[fr]=Rechercher Plasma
 Name[gl]=Busca de Plasma
+Name[he]=חיפוש בפלזמה
 Name[hu]=Plasma kereső
 Name[id]=Pencarian Plasma
 Name[is]=Plasma leit
@@ -70,6 +71,7 @@ Comment[et]=Otsingu seadistamine
 Comment[fi]=Haun asetukset
 Comment[fr]=Configurer la recherche
 Comment[gl]=Configurar a busca
+Comment[he]=הגדרות של חיפוש בפלזמה (Alt+F2 או חיפוש במשגר ישומים)
 Comment[hu]=Keresés beállítása
 Comment[id]=Atur Pencarian
 Comment[is]=Stilla leit
@@ -122,6 +124,7 @@ X-KDE-Keywords[nb]=Søk. fil, Baloo, Runner, Krunner
 X-KDE-Keywords[nds]=Söök, Datei, Baloo, Dreger, Krunner, söken
 X-KDE-Keywords[nl]=Zoeken, bestand, Baloo, Runner, krunner
 X-KDE-Keywords[nn]=søk, fil, Baloo, køyrar, startar, Runner, krunner
+X-KDE-Keywords[pa]=ਖੋਜ, ਫਾਇਲ, ਬਾਲੂ, ਰਨਰ, ਕੇਰਨਰ
 X-KDE-Keywords[pl]=Wyszukiwanie, Plik, Baloo, Uruchamianie, krunner
 X-KDE-Keywords[pt]=Pesquisa, Ficheiro, Baloo, Execução, krunner
 X-KDE-Keywords[pt_BR]=Pesquisar, Procurar, Arquivo, Baloo, Execução, krunner

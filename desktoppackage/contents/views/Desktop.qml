@@ -32,7 +32,6 @@ Item {
     id: root
 
     property Item containment
-    property Item wallpaper
 
     property QtObject widgetExplorer
 
@@ -113,29 +112,33 @@ Item {
 
     PlasmaCore.Dialog {
         id: sidePanel
-        location: PlasmaCore.Types.LeftEdge
+        location: Qt.application.layoutDirection === Qt.RightToLeft ? PlasmaCore.Types.RightEdge : PlasmaCore.Types.LeftEdge
         type: PlasmaCore.Dialog.Dock
         flags: Qt.WindowStaysOnTopHint
 
         hideOnWindowDeactivate: true
 
-        /*
-        If there is no setGeometry call on QWindow the XCB backend will not pass our requested position to kwin
-        as our window position tends to be 0, setX,setY no-ops and means we never set a position as far as QWindow is concerned
-        by setting it to something silly and setting it back before we show the window we avoid that bug.
-        */
-        x: -10
+        x: {
+            var result = desktop.x;
+            if (!containment) {
+                return result;
+            }
+
+            var rect = containment.availableScreenRect;
+            result += rect.x;
+
+            if (Qt.application.layoutDirection === Qt.RightToLeft) {
+                result += rect.width - sidePanel.width;
+            }
+
+            return result;
+        }
+        y: desktop.y + (containment ? containment.availableScreenRect.y : 0)
 
         onVisibleChanged: {
             if (!visible) {
                 sidePanelStack.state = "closed";
                 ActivitySwitcher.Backend.shouldShowSwitcher = false;
-            } else {
-                var rect = containment.availableScreenRect;
-                // get the current available screen geometry and subtract the dialog's frame margins
-                sidePanelStack.height = containment ? rect.height - sidePanel.margins.top - sidePanel.margins.bottom : 1000;
-                sidePanel.x = desktop.x + rect.x;
-                sidePanel.y = desktop.y + rect.y;
             }
 
             lastToggleActivityManagerTimestamp = new Date().getTime() / 1000;
@@ -144,9 +147,12 @@ Item {
         mainItem: Loader {
             id: sidePanelStack
             asynchronous: true
-            height: 1000 //start with some arbitrary height, will be changed from onVisibleChanged
             width: item ? item.width: 0
+            height: containment ? containment.availableScreenRect.height - sidePanel.margins.top - sidePanel.margins.bottom : 1000
             state: "closed"
+
+            LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+            LayoutMirroring.childrenInherit: true
 
             onLoaded: {
                 if (sidePanelStack.item) {
@@ -182,42 +188,37 @@ Item {
 
     Connections {
         target: containment
-        onAvailableScreenRectChanged: {
-            var rect = containment.availableScreenRect;
-            sidePanel.requestActivate();
-            // get the current available screen geometry and subtract the dialog's frame margins
-            sidePanelStack.height = containment ? rect.height - sidePanel.margins.top - sidePanel.margins.bottom : 1000;
-            sidePanel.x = desktop.x + rect.x;
-            sidePanel.y = desktop.y + rect.y;
-        }
+        onAvailableScreenRectChanged: sidePanel.requestActivate();
     }
 
     onContainmentChanged: {
-        //containment.parent = root;
+        if (containment == null) {
+            return;
+        }
+
+        if (switchAnim.running) {
+            //If the animation was still running, stop it and reset
+            //everything so that a consistent state can be kept
+            switchAnim.running = false;
+            internal.newContainment.visible = false;
+            internal.oldContainment.visible = false;
+            internal.oldContainment = null;
+        }
 
         internal.newContainment = containment;
+        containment.visible = true;
 
-        if (containment != null) {
-            containment.visible = true;
-        }
-        if (containment != null) {
-            if (internal.oldContainment != null && internal.oldContainment != containment) {
-                if (internal.newContainment != null) {
-                    switchAnim.running = true;
-                }
-            } else {
-                containment.anchors.left = root.left;
-                containment.anchors.top = root.top;
-                containment.anchors.right = root.right;
-                containment.anchors.bottom = root.bottom;
-                internal.oldContainment = containment;
+        if (internal.oldContainment != null && internal.oldContainment != containment) {
+            switchAnim.running = true;
+        } else {
+            containment.anchors.left = root.left;
+            containment.anchors.top = root.top;
+            containment.anchors.right = root.right;
+            containment.anchors.bottom = root.bottom;
+            if (internal.oldContainment) {
+                internal.oldContainment.visible = false;
             }
-        }
-    }
-
-    onWallpaperChanged: {
-        if (!internal.oldWallpaper) {
-            internal.oldWallpaper = wallpaper;
+            internal.oldContainment = containment;
         }
     }
 
@@ -227,7 +228,6 @@ Item {
 
         property Item oldContainment: null;
         property Item newContainment: null;
-        property Item oldWallpaper: null;
     }
 
     SequentialAnimation {
@@ -239,17 +239,16 @@ Item {
                     containment.anchors.top = undefined;
                     containment.anchors.right = undefined;
                     containment.anchors.bottom = undefined;
-                }
-                internal.oldContainment.anchors.left = undefined;
-                internal.oldContainment.anchors.top = undefined;
-                internal.oldContainment.anchors.right = undefined;
-                internal.oldContainment.anchors.bottom = undefined;
-
-                if (containment) {
-                    internal.oldContainment.z = 0;
-                    internal.oldContainment.x = 0;
                     containment.z = 1;
                     containment.x = root.width;
+                }
+                if (internal.oldContainment) {
+                    internal.oldContainment.anchors.left = undefined;
+                    internal.oldContainment.anchors.top = undefined;
+                    internal.oldContainment.anchors.right = undefined;
+                    internal.oldContainment.anchors.bottom = undefined;
+                    internal.oldContainment.z = 0;
+                    internal.oldContainment.x = 0;
                 }
             }
         }
@@ -271,15 +270,15 @@ Item {
         }
         ScriptAction {
             script: {
+                if (internal.oldContainment) {
+                    internal.oldContainment.visible = false;
+                }
                 if (containment) {
                     containment.anchors.left = root.left;
                     containment.anchors.top = root.top;
                     containment.anchors.right = root.right;
                     containment.anchors.bottom = root.bottom;
-                    internal.oldContainment.visible = false;
-                    internal.oldWallpaper.opacity = 1;
                     internal.oldContainment = containment;
-                    internal.oldWallpaper = wallpaper;
                 }
             }
         }

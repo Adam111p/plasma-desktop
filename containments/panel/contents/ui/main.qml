@@ -44,7 +44,6 @@ DragDrop.DropArea {
     property Item toolBox
     property var layoutManager: LayoutManager
 
-
     property Item dragOverlay
 
     property bool isHorizontal: plasmoid.formFactor != PlasmaCore.Types.Vertical
@@ -55,21 +54,20 @@ DragDrop.DropArea {
 
 //BEGIN functions
 function addApplet(applet, x, y) {
-    var container = appletContainerComponent.createObject(root)
+    var container = appletContainerComponent.createObject(root, {
+        applet: applet,
 
-    var appletWidth = applet.width;
-    var appletHeight = applet.height;
+        // don't show applet if it choses to be hidden but still make it
+        // accessible in the panelcontroller
+        visible: Qt.binding(function() {
+            return applet.status !== PlasmaCore.Types.HiddenStatus || (!plasmoid.immutable && plasmoid.userConfiguring)
+        })
+    });
+
     applet.parent = container;
-    container.applet = applet;
     applet.anchors.fill = container;
 
     applet.visible = true;
-
-    // don't show applet if it choses to be hidden but still make it
-    // accessible in the panelcontroller
-    container.visible = Qt.binding(function() {
-        return applet.status !== PlasmaCore.Types.HiddenStatus || (!plasmoid.immutable && plasmoid.userConfiguring)
-    })
 
     // Is there a DND placeholder? Replace it!
     if (dndSpacer.parent === currentLayout) {
@@ -83,12 +81,8 @@ function addApplet(applet, x, y) {
 
     // Fall through to determining an appropriate insert position.
     } else {
-        var before = null;
+        var before = lastSpacer;
         container.animationsEnabled = false;
-
-        if (lastSpacer.parent === currentLayout) {
-            before = lastSpacer;
-        }
 
         // Insert icons to the left of whatever is at the center (usually a Task Manager),
         // if it exists.
@@ -107,53 +101,36 @@ function addApplet(applet, x, y) {
                 before = middle;
             }
 
-        // Otherwise if lastSpacer is here, enqueue before it.
-        } 
-
-        if (before) {
-            LayoutManager.insertBefore(before, container);
-
-        // Fall through to adding at the end.
-        } else {
-            container.parent = currentLayout;
+        // lastSpacer is here, enqueue before it.
         }
+
+
+        LayoutManager.insertBefore(before, container);
 
         //event compress the enable of animations
         startupTimer.restart();
-    }
-
-    if (applet.Layout.fillWidth) {
-        lastSpacer.parent = root;
     }
 }
 
 
 function checkLastSpacer() {
-    lastSpacer.parent = root
-
-    var expands = false;
-
-    if (isHorizontal) {
-        for (var container in currentLayout.children) {
-            var item = currentLayout.children[container];
-            if (item.Layout && item.Layout.fillWidth) {
-                expands = true;
-            }
+    var flexibleFound = false;
+    for (var i = 0; i < currentLayout.children.length; ++i) {
+        var applet = currentLayout.children[i].applet;
+        if (!applet) {
+            continue;
         }
-    } else {
-        for (var container in currentLayout.children) {
-            var item = currentLayout.children[container];
-            if (item.Layout && item.Layout.fillHeight) {
-                expands = true;
-            }
+        if (!applet.visible || !applet.Layout) {
+            continue;
+        }
+        if ((root.isHorizontal && applet.Layout.fillWidth) ||
+            (!root.isHorizontal && applet.Layout.fillHeight)) {
+                flexibleFound = true;
+            break
         }
     }
-    if (!expands) {
-        lastSpacer.parent = currentLayout
-    }
-
+    lastSpacer.visible= !flexibleFound;
 }
-
 //END functions
 
 //BEGIN connections
@@ -165,8 +142,13 @@ function checkLastSpacer() {
         LayoutManager.lastSpacer = lastSpacer;
         LayoutManager.restore();
         containmentSizeSyncTimer.restart();
-        plasmoid.action("configure").visible = !plasmoid.immutable;
-        plasmoid.action("configure").enabled = !plasmoid.immutable;
+
+        plasmoid.action("configure").visible = Qt.binding(function() {
+            return !plasmoid.immutable;
+        });
+        plasmoid.action("configure").enabled = Qt.binding(function() {
+            return !plasmoid.immutable;
+        });
     }
 
     onDragEnter: {
@@ -204,25 +186,13 @@ function checkLastSpacer() {
 
     Containment.onAppletAdded: {
         addApplet(applet, x, y);
+        checkLastSpacer();
         LayoutManager.save();
     }
 
     Containment.onAppletRemoved: {
         LayoutManager.removeApplet(applet);
-        var flexibleFound = false;
-        for (var i = 0; i < currentLayout.children.length; ++i) {
-            var applet = currentLayout.children[i].applet;
-            if (((root.isHorizontal && applet.Layout.fillWidth) ||
-                (!root.isHorizontal && applet.Layout.fillHeight)) &&
-                applet.visible) {
-                flexibleFound = true;
-                break
-            }
-        }
-        if (!flexibleFound) {
-            lastSpacer.parent = currentLayout;
-        }
-
+        checkLastSpacer();
         LayoutManager.save();
     }
 
@@ -238,30 +208,25 @@ function checkLastSpacer() {
             for (var i = 0; i < plasmoid.applets.length; ++i) {
                 plasmoid.applets[i].expanded = false;
             }
+
             if (!dragOverlay) {
                 var component = Qt.createComponent("ConfigOverlay.qml");
-                if (component.status == Component.Ready) {
+                if (component.status === Component.Ready) {
                     dragOverlay = component.createObject(root);
                 } else {
-                    console.log("Could not create ConfigOverlay");
-                    console.log(component.errorString());
+                    console.log("Could not create ConfigOverlay:", component.errorString());
                 }
                 component.destroy();
             } else {
                 dragOverlay.visible = true;
             }
         } else {
-            dragOverlay.visible = false;
             dragOverlay.destroy();
         }
     }
 
     Plasmoid.onFormFactorChanged: containmentSizeSyncTimer.restart();
-    Plasmoid.onImmutableChanged: {
-        containmentSizeSyncTimer.restart();
-        plasmoid.action("configure").visible = !plasmoid.immutable;
-        plasmoid.action("configure").enabled = !plasmoid.immutable;
-    }
+    Plasmoid.onImmutableChanged: containmentSizeSyncTimer.restart();
 
     onToolBoxChanged: {
         containmentSizeSyncTimer.restart();
@@ -320,14 +285,16 @@ function checkLastSpacer() {
             Layout.onMaximumWidthChanged: movingForResize = true;
             Layout.onMaximumHeightChanged: movingForResize = true;
 
-            PlasmaComponents.BusyIndicator {
+            Loader {
                 z: 1000
-                visible: applet && applet.busy
-                running: visible
                 anchors.centerIn: parent
-                width: Math.min(parent.width, parent.height)
-                height: width
+                active: applet && applet.busy
+                sourceComponent: PlasmaComponents.BusyIndicator {
+                    width: Math.min(container.width, container.height)
+                    height: width
+                }
             }
+
             onXChanged: {
                 if (movingForResize) {
                     movingForResize = false;
@@ -390,6 +357,14 @@ function checkLastSpacer() {
         height: (plasmoid.formFactor == PlasmaCore.Types.Vertical) ?  theme.mSize(theme.defaultFont).width * 10 : currentLayout.height
     }
 
+    // while the user is moving the applet when configuring the panel, the applet is reparented
+    // here so it can be moved freely; previously it was reparented to "root" but this one does not
+    // take into account the toolbox (which is left-of) the layout in right-to-left languages
+    Item {
+        id: moveAppletLayer
+        anchors.fill: currentLayout
+    }
+
     GridLayout {
         id: currentLayout
         property bool isLayoutHorizontal
@@ -398,18 +373,20 @@ function checkLastSpacer() {
 
         Layout.preferredWidth: {
             var width = 0;
-            for (var i = 0; i < currentLayout.children.length; ++i) {
-                if (currentLayout.children[i].Layout) {
-                    width += Math.max(currentLayout.children[i].Layout.minimumWidth, currentLayout.children[i].Layout.preferredWidth);
+            for (var i = 0, length = currentLayout.children.length; i < length; ++i) {
+                var item = currentLayout.children[i];
+                if (item.Layout) {
+                    width += Math.max(item.Layout.minimumWidth, item.Layout.preferredWidth);
                 }
             }
             return width;
         }
         Layout.preferredHeight: {
             var height = 0;
-            for (var i = 0; i < currentLayout.children.length; ++i) {
-                if (currentLayout.children[i].Layout) {
-                    height += Math.max(currentLayout.children[i].Layout.minimumHeight, currentLayout.children[i].Layout.preferredHeight);
+            for (var i = 0, length = currentLayout.children.length; i < length; ++i) {
+                var item = currentLayout.children[i];
+                if (item.Layout) {
+                    height += Math.max(item.Layout.minimumHeight, item.Layout.preferredHeight);
                 }
             }
             return height;
@@ -439,7 +416,7 @@ function checkLastSpacer() {
         interval: 150
         onTriggered: {
             dndSpacer.parent = root;
-            currentLayout.x = (Qt.application.layoutDirection === Qt.RightToLeft) ? toolBox.width : 0;
+            currentLayout.x = (isHorizontal && toolBox && Qt.application.layoutDirection === Qt.RightToLeft && !plasmoid.immutable) ? toolBox.width : 0;
             currentLayout.y = 0
             currentLayout.width = root.width - (isHorizontal && toolBox && !plasmoid.immutable ? toolBox.width : 0)
             currentLayout.height = root.height - (!isHorizontal && toolBox && !plasmoid.immutable ? toolBox.height : 0)
@@ -453,8 +430,9 @@ function checkLastSpacer() {
         interval: 4000
         onTriggered: {
             for (var i = 0; i < currentLayout.children.length; ++i) {
-                if ( currentLayout.children[i].hasOwnProperty('animationsEnabled') ) {
-                    currentLayout.children[i].animationsEnabled = true;
+                var item = currentLayout.children[i];
+                if (item.hasOwnProperty("animationsEnabled")) {
+                    item.animationsEnabled = true;
                 }
             }
         }

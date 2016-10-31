@@ -105,12 +105,12 @@ Item {
 
     Action {
         shortcut: "Up"
-        onTriggered: list.decrementCurrentIndex()
+        onTriggered: list.currentIndex = (list.count + list.currentIndex - 1) % list.count 
     }
 
     Action {
         shortcut: "Down"
-        onTriggered: list.incrementCurrentIndex()
+        onTriggered: list.currentIndex = (list.currentIndex + 1) % list.count
     }
 
     Action {
@@ -139,7 +139,7 @@ Item {
         onClicked: {
             list.contentX = 0
             list.contentY = 0
-            categoryButton.text = model.display
+            categoryButton.text = (model.filterData ? model.display : "")
             widgetExplorer.widgetsModel.filterQuery = model.filterData
             widgetExplorer.widgetsModel.filterType = model.filterType
         }
@@ -195,54 +195,74 @@ Item {
     */
 
 
-    GridLayout {
+    RowLayout {
         id: topBar
         anchors {
             top: parent.top
             left: parent.left
             right: parent.right
         }
-        columns: 2
 
-        PlasmaExtras.Title {
-            id: heading
-            text: i18nd("plasma_shell_org.kde.plasma.desktop", "Widgets")
+        Item {
+            id: header
+            property bool showingSearch: false
             Layout.fillWidth: true
+            Layout.minimumHeight: Math.max(heading.height, searchInput.height)
+            Layout.alignment: Qt.AlignVCenter
+            PlasmaExtras.Title {
+                id: heading
+                anchors.verticalCenter: parent.verticalCenter
+                text: i18nd("plasma_shell_org.kde.plasma.desktop", "Widgets")
+                width: parent.width
+                elide: Text.ElideRight
+                visible: !header.showingSearch
+            }
+            PlasmaComponents.TextField {
+                id: searchInput
+                width: parent.width
+                clearButtonShown: true
+                anchors.verticalCenter: parent.verticalCenter
+                placeholderText: i18nd("plasma_shell_org.kde.plasma.desktop", "Search...")
+                onTextChanged: {
+                    list.positionViewAtBeginning()
+                    list.currentIndex = -1
+                    widgetExplorer.widgetsModel.searchTerm = text
+                    header.showingSearch = (text != "");
+                }
+
+                Component.onCompleted: forceActiveFocus()
+                visible: header.showingSearch
+            }
         }
 
         PlasmaComponents.ToolButton {
-            id: closeButton
-            anchors {
-                right: parent.right
-                verticalCenter: heading.verticalCenter
+            id: searchButton
+            iconSource: "edit-find"
+
+            checkable: true
+            onClicked: header.showingSearch = !header.showingSearch
+            checked: header.showingSearch
+            onCheckedChanged: {
+                if (!checked) {
+                    searchInput.text = "";
+                }
             }
-            iconSource: "window-close"
-            onClicked: main.closed()
         }
 
-        PlasmaComponents.TextField {
-            id: searchInput
-            clearButtonShown: true
-            placeholderText: i18nd("plasma_shell_org.kde.plasma.desktop", "Search...")
-            onTextChanged: {
-                list.positionViewAtBeginning()
-                list.currentIndex = -1
-                widgetExplorer.widgetsModel.searchTerm = text
-            }
-
-            Component.onCompleted: forceActiveFocus()
-            Layout.columnSpan: 2
-            Layout.fillWidth: true
-        }
-        PlasmaComponents.Button {
+        PlasmaComponents.ToolButton {
             id: categoryButton
-            text: i18nd("plasma_shell_org.kde.plasma.desktop", "Categories")
+            tooltip: i18nd("plasma_shell_org.kde.plasma.desktop", "Categories")
+            iconSource: "view-filter"
             onClicked: {
                 categoriesDialog.model = widgetExplorer.filterModel
                 categoriesDialog.open(0, categoryButton.height)
             }
-            Layout.columnSpan: 2
-            Layout.fillWidth: true
+        }
+
+        PlasmaComponents.ToolButton {
+            id: closeButton
+            iconSource: "window-close"
+            onClicked: main.closed()
         }
     }
 
@@ -262,6 +282,8 @@ Item {
             topMargin: units.smallSpacing
             bottomMargin: units.smallSpacing
         }
+
+        verticalScrollBarPolicy: Qt.ScrollBarAlwaysOn
 
         // hide the flickering by fading in nicely
         opacity: setModelTimer.running ? 0 : 1

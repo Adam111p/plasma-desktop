@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2012-2013 by Eike Hein <hein@kde.org>                   *
+ *   Copyright (C) 2012-2016 by Eike Hein <hein@kde.org>                   *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -21,13 +21,41 @@ import QtQuick 2.0
 
 import org.kde.draganddrop 2.0
 
+import org.kde.taskmanager 0.1 as TaskManager
+
 import "../code/layout.js" as LayoutManager
 import "../code/tools.js" as TaskTools
 
 Item {
-    signal urlDropped(url url)
+    signal urlsDropped(var urls)
 
     property Item target
+    property Item ignoredItem
+    property bool moved: false
+
+    property alias hoveredItem: dropHandler.hoveredItem
+
+    Timer {
+        id: ignoreItemTimer
+
+        repeat: false
+        interval: 750
+
+        onTriggered: {
+            ignoredItem = null;
+        }
+    }
+
+    Connections {
+        target: tasks
+
+        onDragSourceChanged: {
+            if (!dragSource) {
+                ignoredItem = null;
+                ignoreItemTimer.stop();
+            }
+        }
+    }
 
     DropArea {
         id: dropHandler
@@ -45,13 +73,31 @@ Item {
 
             var above = target.childAt(event.x, event.y);
 
-            // HACK: plasmoid.configuration.sortingStrategy is an integer representation
-            // of the TaskManager::GroupManager::TaskSortingStrategy enum.
-            if (tasks.dragSource && backend.sortingStrategy == 1) {
-                if (tasks.dragSource != above) {
-                    itemMove(tasks.dragSource.itemId,
-                        TaskTools.insertionIndexAt(tasks.dragSource.itemIndex,
-                            event.x, event.y));
+            // If we're mixing launcher tasks with other tasks and are moving
+            // a (small) launcher task across a non-launcher task, don't allow
+            // the latter to be the move target twice in a row for a while, as
+            // it will naturally be moved underneath the cursor as result of the
+            // initial move, due to being far larger than the launcher delegate.
+            // TODO: This restriction (minus the timer, which improves things)
+            // has been proven out in the EITM fork, but could be improved later
+            // by tracking the cursor movement vector and allowing the drag if
+            // the movement direction has reversed, etablishing user intent to
+            // move back.
+            if (!plasmoid.configuration.separateLaunchers && tasks.dragSource != null
+                 && tasks.dragSource.m.IsLauncher === true && above != null
+                 && above.m.IsLauncher !== true && above == ignoredItem) {
+                return;
+            } else {
+                ignoredItem = null;
+            }
+
+            if (tasksModel.sortMode == TaskManager.TasksModel.SortManual && tasks.dragSource) {
+                var insertAt = TaskTools.insertIndexAt(above, event.x, event.y);
+
+                if (!groupDialog.visible && tasks.dragSource != above && tasks.dragSource.itemIndex != insertAt) {
+                    tasksModel.move(tasks.dragSource.itemIndex, insertAt);
+                    ignoredItem = above;
+                    ignoreItemTimer.restart();
                 }
             } else if (!tasks.dragSource && above && hoveredItem != above) {
                 hoveredItem = above;
@@ -74,7 +120,7 @@ Item {
             }
 
             if (event.mimeData.hasUrls) {
-                parent.urlDropped(event.mimeData.url);
+                parent.urlsDropped(event.mimeData.urls);
             }
         }
 
@@ -85,11 +131,11 @@ Item {
             repeat: false
 
             onTriggered: {
-                if (parent.hoveredItem.isGroupParent) {
+                if (parent.hoveredItem.m.IsGroupParent === true) {
                     groupDialog.visualParent = parent.hoveredItem;
                     groupDialog.visible = true;
-                } else if (!parent.hoveredItem.isLauncher) {
-                    tasks.activateItem(parent.hoveredItem.itemId, false);
+                } else if (parent.hoveredItem.m.IsLauncher !== true) {
+                    tasksModel.requestActivate(parent.hoveredItem.modelIndex());
                 }
             }
         }
@@ -102,6 +148,6 @@ Item {
         property int wheelDelta: 0;
         enabled: plasmoid.configuration.wheelEnabled
 
-        onWheel: wheelDelta = TaskTools.wheelActivateNextPrevTask(false, wheelDelta, wheel.angleDelta.y);
+        onWheel: wheelDelta = TaskTools.wheelActivateNextPrevTask(null, wheelDelta, wheel.angleDelta.y);
     }
 }

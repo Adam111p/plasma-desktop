@@ -25,7 +25,7 @@
 #define __JOB_RUNNER_H__
 
 #include <QUrl>
-#include <KDialog>
+#include <QDialog>
 #include "FontInstInterface.h"
 
 class QLabel;
@@ -33,15 +33,17 @@ class QProgressBar;
 class QStackedWidget;
 class QCloseEvent;
 class QCheckBox;
+class QDialogButtonBox;
+class QAbstractButton;
 class KJob;
-class KTempDir;
+class QTemporaryDir;
 
 namespace KFI
 {
 
 class CActionLabel;
 
-class CJobRunner : public KDialog
+class CJobRunner : public QDialog
 {
     Q_OBJECT
 
@@ -103,7 +105,7 @@ class CJobRunner : public KDialog
     void checkInterface();
     void dbusServiceOwnerChanged(const QString &name, const QString &from, const QString &to);
     void dbusStatus(int pid, int status);
-    void slotButtonClicked(int button);
+    void slotButtonClicked(QAbstractButton *button);
 
     private:
 
@@ -128,12 +130,15 @@ class CJobRunner : public KDialog
     bool                    itsAutoSkip,
                             itsCancelClicked,
                             itsModified;
-    KTempDir                *itsTempDir;
+    QTemporaryDir           *itsTempDir;
     QString                 itsCurrentFile;
     CActionLabel            *itsActionLabel;
     QStackedWidget          *itsStack;
     int                     itsLastDBusStatus;
     QCheckBox               *itsDontShowFinishedMsg;
+    QDialogButtonBox        *itsButtonBox;
+    QPushButton             *itsSkipButton;
+    QPushButton             *itsAutoSkipButton;
 };
 
 }

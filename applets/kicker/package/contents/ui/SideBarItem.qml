@@ -66,6 +66,8 @@ Item {
         active: listener.containsMouse
 
         source: model.decoration
+
+        usesPlasmaTheme: repeater.usesPlasmaTheme
     }
 
     MouseEventListener {
@@ -121,6 +123,7 @@ Item {
             if (pressX != -1 && dragHelper.isDrag(pressX, pressY, mouse.x, mouse.y)) {
                 kicker.dragSource = item;
                 dragHelper.startDrag(kicker, model.url, model.icon);
+                pressed = false;
                 pressX = -1;
                 pressY = -1;
 

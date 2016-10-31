@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2012-2013 by Eike Hein <hein@kde.org>                   *
+ *   Copyright (C) 2012-2016 by Eike Hein <hein@kde.org>                   *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -23,7 +23,8 @@ import org.kde.plasma.plasmoid 2.0
 
 import org.kde.plasma.core 2.0 as PlasmaCore
 
-import org.kde.plasma.private.taskmanager 0.1 as TaskManager
+import org.kde.taskmanager 0.1 as TaskManager
+import org.kde.plasma.private.taskmanager 0.1 as TaskManagerApplet
 
 import "../code/layout.js" as LayoutManager
 import "../code/tools.js" as TaskTools
@@ -35,6 +36,8 @@ Item {
 
     property bool vertical: (plasmoid.formFactor == PlasmaCore.Types.Vertical)
     property bool iconsOnly: (plasmoid.pluginName == "org.kde.plasma.icontasks")
+
+    property QtObject contextMenuComponent: Qt.createComponent("ContextMenu.qml");
 
     Plasmoid.preferredRepresentation: Plasmoid.fullRepresentation
 
@@ -51,17 +54,8 @@ Item {
     property Item dragSource: null
 
     signal requestLayout
-    signal activateItem(int id, bool toggle)
-    signal activateWindow(int winId)
-    signal closeByWinId(int winId);
-    signal closeByItemId(int itemId);
-    signal launchNewInstance(int id)
-    signal itemContextMenu(Item item, QtObject configAction)
-    signal itemHovered(int id, bool hovered)
-    signal windowHovered(int winId, bool hovered)
-    signal itemMove(int id, int newIndex)
-    signal itemGeometryChanged(Item item, int id)
-    signal presentWindows(int groupParentId)
+    signal windowsHovered(variant winIds, bool hovered)
+    signal presentWindows(variant winIds)
 
     onWidthChanged: {
         taskList.width = LayoutManager.layoutWidth();
@@ -79,21 +73,156 @@ Item {
         taskList.height = LayoutManager.layoutHeight();
     }
 
-    TaskManager.Backend {
+    onDragSourceChanged: {
+        if (dragSource == null) {
+            tasksModel.syncLaunchers();
+        }
+    }
+
+    TaskManager.TasksModel {
+        id: tasksModel
+
+        virtualDesktop: virtualDesktopInfo.currentDesktop
+        screenGeometry: plasmoid.screenGeometry
+        activity: activityInfo.currentActivity
+
+        filterByVirtualDesktop: plasmoid.configuration.showOnlyCurrentDesktop
+        filterByScreen: plasmoid.configuration.showOnlyCurrentScreen
+        filterByActivity: plasmoid.configuration.showOnlyCurrentActivity
+        filterNotMinimized: plasmoid.configuration.showOnlyMinimized
+
+        sortMode: iconsOnly ? TaskManager.TasksModel.SortManual
+            : sortModeEnumValue(plasmoid.configuration.sortingStrategy)
+        launchInPlace: iconsOnly
+        separateLaunchers: {
+            if (!iconsOnly && !plasmoid.configuration.separateLaunchers
+                && plasmoid.configuration.sortingStrategy == 1) {
+                return false;
+            }
+
+            return true;
+        }
+
+        groupMode: iconsOnly ? TaskManager.TasksModel.GroupApplication
+            : sortModeEnumValue(plasmoid.configuration.groupingStrategy)
+        groupInline: !plasmoid.configuration.groupPopups
+        groupingWindowTasksThreshold: (plasmoid.configuration.onlyGroupWhenFull && !iconsOnly
+            ? LayoutManager.optimumCapacity(width, height) + 1 : -1)
+
+        onLauncherListChanged: {
+            layoutTimer.restart();
+            plasmoid.configuration.launchers = launcherList;
+        }
+
+        onGroupingAppIdBlacklistChanged: {
+            plasmoid.configuration.groupingAppIdBlacklist = groupingAppIdBlacklist;
+        }
+
+        onGroupingLauncherUrlBlacklistChanged: {
+            plasmoid.configuration.groupingLauncherUrlBlacklist = groupingLauncherUrlBlacklist;
+        }
+
+        function sortModeEnumValue(index) {
+            switch (index) {
+                case 0:
+                    return TaskManager.TasksModel.SortDisabled;
+                case 1:
+                    return TaskManager.TasksModel.SortManual;
+                case 2:
+                    return TaskManager.TasksModel.SortAlpha;
+                case 3:
+                    return TaskManager.TasksModel.SortVirtualDesktop;
+                case 4:
+                    return TaskManager.TasksModel.SortActivity;
+                default:
+                    return TaskManager.TasksModel.SortDisabled;
+            }
+        }
+
+        function groupModeEnumValue(index) {
+            switch (index) {
+                case 0:
+                    return TaskManager.TasksModel.GroupDisabled;
+                case 1:
+                    return TaskManager.TasksModel.GroupApplications;
+            }
+        }
+
+        Component.onCompleted: {
+            launcherList = plasmoid.configuration.launchers;
+            groupingAppIdBlacklist = plasmoid.configuration.groupingAppIdBlacklist;
+            groupingLauncherUrlBlacklist = plasmoid.configuration.groupingLauncherUrlBlacklist;
+
+            // Only hook up view only after the above churn is done.
+            taskRepeater.model = tasksModel;
+        }
+    }
+
+    TaskManager.VirtualDesktopInfo {
+        id: virtualDesktopInfo
+    }
+
+    TaskManager.ActivityInfo {
+        id: activityInfo
+    }
+
+    TaskManagerApplet.Backend {
         id: backend
 
         taskManagerItem: tasks
         toolTipItem: toolTipDelegate
         highlightWindows: plasmoid.configuration.highlightWindows
 
-        groupingStrategy: iconsOnly ? 1 : plasmoid.configuration.groupingStrategy
-        sortingStrategy: iconsOnly ? 1 : plasmoid.configuration.sortingStrategy
+        onAddLauncher: {
+            tasks.addLauncher(url);
+        }
+    }
 
-        onLaunchersChanged: plasmoid.configuration.launchers = launchers
+    PlasmaCore.DataSource {
+        id: mpris2Source
+        engine: "mpris2"
+        connectedSources: sources
 
-        Component.onCompleted: {
-            launchers = plasmoid.configuration.launchers;
-            visualModel.model = backend.tasksModel;
+        function sourceNameForLauncherUrl(launcherUrl) {
+            // MPRIS spec explicitly mentions that "DesktopEntry" is with .desktop extension trimmed
+            // Moreover, remove URL parameters, like wmClass (part after the question mark)
+            var desktopFileName = launcherUrl.toString().split('/').pop().split('?')[0].replace(".desktop", "")
+
+            for (var i = 0, length = sources.length; i < length; ++i) {
+                var source = sources[i];
+                var sourceData = data[source];
+
+                if (sourceData && sourceData.DesktopEntry === desktopFileName) {
+                    return source
+                }
+            }
+
+            return ""
+        }
+
+        function startOperation(source, op) {
+            var service = serviceForSource(source)
+            var operation = service.operationDescription(op)
+            return service.startOperationCall(operation)
+        }
+
+        function goPrevious(source) {
+            startOperation(source, "Previous");
+        }
+        function goNext(source) {
+            startOperation(source, "Next");
+        }
+        function playPause(source) {
+            startOperation(source, "PlayPause");
+        }
+        function stop(source) {
+            startOperation(source, "Stop");
+        }
+        function raise(source) {
+            startOperation(source, "Raise");
+        }
+        function quit(source) {
+            startOperation(source, "Quit");
         }
     }
 
@@ -108,17 +237,11 @@ Item {
         }
     }
 
-    Timer {
-        id: layoutTimer
-
-        interval: 0
-        repeat: false
-
-        onTriggered: {
-            taskList.width = LayoutManager.layoutWidth();
-            taskList.height = LayoutManager.layoutHeight();
-            LayoutManager.layout(taskRepeater);
-        }
+    Binding {
+        target: plasmoid
+        property: "status"
+        value: (tasksModel.anyTaskDemandsAttention
+            ? PlasmaCore.Types.NeedsAttentionStatus : PlasmaCore.Types.PassiveStatus)
     }
 
     Connections {
@@ -134,58 +257,13 @@ Item {
 
     Connections {
         target: plasmoid.configuration
-        onLaunchersChanged: backend.launchers = plasmoid.configuration.launchers
+
+        onLaunchersChanged: tasksModel.launcherList = plasmoid.configuration.launchers
+        onGroupingAppIdBlacklistChanged: tasksModel.groupingAppIdBlacklist = plasmoid.configuration.groupingAppIdBlacklist;
+        onGroupingLauncherUrlBlacklistChanged: tasksModel.groupingLauncherUrlBlacklist = plasmoid.configuration.groupingLauncherUrlBlacklist;
     }
 
-    Binding {
-        target: backend.groupManager
-        property: "screenGeometry"
-        value: plasmoid.screenGeometry
-    }
-
-    Binding {
-        target: backend.groupManager
-        property: "onlyGroupWhenFull"
-        value: iconsOnly ? false : plasmoid.configuration.onlyGroupWhenFull
-    }
-
-    Binding {
-        target: backend.groupManager
-        property: "fullLimit"
-        value: LayoutManager.optimumCapacity(width, height) + 1
-    }
-
-    Binding {
-        target: backend.groupManager
-        property: "showOnlyCurrentScreen"
-        value: plasmoid.configuration.showOnlyCurrentScreen
-    }
-
-    Binding {
-        target: backend.groupManager
-        property: "showOnlyCurrentDesktop"
-        value: plasmoid.configuration.showOnlyCurrentDesktop
-    }
-
-    Binding {
-        target: backend.groupManager
-        property: "showOnlyCurrentActivity"
-        value: plasmoid.configuration.showOnlyCurrentActivity
-    }
-
-    Binding {
-        target: backend.groupManager
-        property: "showOnlyMinimized"
-        value: plasmoid.configuration.showOnlyMinimized
-    }
-
-    Binding {
-        target: backend.groupManager
-        property: "separateLaunchers"
-        value: !iconsOnly
-    }
-
-    TaskManager.DragHelper {
+    TaskManagerApplet.DragHelper {
         id: dragHelper
 
         dragIconSize: units.iconSizes.medium
@@ -212,12 +290,31 @@ Item {
         anchors.fill: parent
 
         target: taskList
-    }
 
-    VisualDataModel {
-        id: visualModel
+        onUrlsDropped: {
+            // If all dropped URLs point to application desktop files, we'll add a launcher for each of them.
+            var createLaunchers = urls.every(function (item) {
+                return backend.isApplication(item)
+            });
 
-        delegate: Task {}
+            if (createLaunchers) {
+                urls.forEach(function (item) {
+                    addLauncher(item);
+                });
+                return;
+            }
+
+            if (!hoveredItem) {
+                return;
+            }
+
+            // DeclarativeMimeData urls is a QJsonArray but requestOpenUrls expects a proper QList<QUrl>.
+            var urlsList = backend.jsonArrayToUrlList(urls);
+
+            // Otherwise we'll just start a new instance of the application with the URLs as argument,
+            // as you probably don't expect some of your files to open in the app and others to spawn launchers.
+            tasksModel.requestOpenUrls(hoveredItem.modelIndex(), urlsList);
+        }
     }
 
     ToolTipDelegate {
@@ -250,31 +347,40 @@ Item {
             }
         }
 
+        function layout() {
+            taskList.width = LayoutManager.layoutWidth();
+            taskList.height = LayoutManager.layoutHeight();
+            LayoutManager.layout(taskRepeater);
+        }
+
+        Timer {
+            id: layoutTimer
+
+            interval: 0
+            repeat: false
+
+            onTriggered: taskList.layout()
+        }
+
         Repeater {
             id: taskRepeater
 
-            model: visualModel
+            delegate: Task {}
 
-            onItemAdded: tasks.requestLayout()
-            onItemRemoved: tasks.requestLayout()
+            onItemAdded: taskList.layout()
+            onItemRemoved: taskList.layout()
         }
     }
 
     GroupDialog { id: groupDialog }
 
     function hasLauncher(url) {
-        return backend.groupManager.launcherExists(url);
+        return tasksModel.launcherPosition(url) != -1;
     }
 
     function addLauncher(url) {
-        backend.groupManager.addLauncher(url);
-    }
-
-    function updateStatus(demandsAttention) {
-        if (demandsAttention) {
-            plasmoid.status = PlasmaCore.Types.NeedsAttentionStatus;
-        } else if (!backend.anyTaskNeedsAttention) {
-            plasmoid.status = PlasmaCore.Types.PassiveStatus;
+        if (plasmoid.immutability !== PlasmaCore.Types.SystemImmutable) {
+            tasksModel.requestAddLauncher(url);
         }
     }
 
@@ -282,21 +388,18 @@ Item {
         dragSource = null;
     }
 
+    function createContextMenu(task) {
+        var menu = tasks.contextMenuComponent.createObject(task);
+        menu.visualParent = task;
+        menu.mpris2Source = mpris2Source;
+        return menu;
+    }
+
     Component.onCompleted: {
         tasks.requestLayout.connect(layoutTimer.restart);
         tasks.requestLayout.connect(iconGeometryTimer.restart);
-        tasks.activateItem.connect(backend.activateItem);
-        tasks.activateWindow.connect(backend.activateWindow);
-        tasks.closeByWinId.connect(backend.closeByWinId);
-        tasks.closeByItemId.connect(backend.closeByItemId);
-        tasks.launchNewInstance.connect(backend.launchNewInstance);
-        tasks.itemContextMenu.connect(backend.itemContextMenu);
-        tasks.itemHovered.connect(backend.itemHovered);
-        tasks.windowHovered.connect(backend.windowHovered);
-        tasks.itemMove.connect(backend.itemMove);
-        tasks.itemGeometryChanged.connect(backend.itemGeometryChanged);
+        tasks.windowsHovered.connect(backend.windowsHovered);
         tasks.presentWindows.connect(backend.presentWindows);
-        mouseHandler.urlDropped.connect(backend.urlDropped);
         dragHelper.dropped.connect(resetDragSource);
     }
 }

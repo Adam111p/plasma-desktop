@@ -1,5 +1,5 @@
 project(plasma-desktop)
-set(PROJECT_VERSION "5.6.90")
+set(PROJECT_VERSION "5.8.90")
 set(PROJECT_VERSION_MAJOR 5)
 
 cmake_minimum_required(VERSION 2.8.12 FATAL_ERROR)
@@ -29,7 +29,7 @@ find_package(Qt5 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS
     Concurrent
 )
 
-set(KF5_MIN_VERSION "5.20.0")
+set(KF5_MIN_VERSION "5.24.0")
 find_package(KF5 ${KF5_MIN_VERSION} REQUIRED COMPONENTS
     Auth
     Plasma
@@ -50,6 +50,7 @@ find_package(KF5 ${KF5_MIN_VERSION} REQUIRED COMPONENTS
     DBusAddons
     Activities
     ActivitiesStats
+    Config
 )
 
 find_package(LibKWorkspace CONFIG REQUIRED)
@@ -139,7 +140,9 @@ configure_file(config-runtime.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-runtime
 
 plasma_install_package(desktoppackage org.kde.plasma.desktop shells shell)
 
-plasma_install_package(layout-templates/org.kde.plasma.desktop.defaultPanel org.kde.plasma.desktop.defaultPanel layout-templates layout-template)
+add_definitions(-DQT_NO_URL_CAST_FROM_STRING)
+
+add_subdirectory(layout-templates)
 
 add_subdirectory(doc)
 add_subdirectory(runners)
@@ -155,4 +158,5 @@ add_subdirectory(solid-device-automounter)
 if(X11_Xkb_FOUND AND XCB_XKB_FOUND)
     add_subdirectory(kaccess)
 endif()
+install(FILES org.kde.plasmashell.metainfo.xml DESTINATION ${KDE_INSTALL_METAINFODIR})
 feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES)

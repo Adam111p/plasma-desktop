@@ -29,6 +29,10 @@
 #include <QTimer>
 #include <QDateTime>
 
+// Qml and QtQuick
+#include <QQuickImageProvider>
+#include <QQmlEngine>
+
 // KDE
 #include <kglobalaccel.h>
 #include <klocalizedstring.h>
@@ -45,8 +49,14 @@
 #define ACTION_NAME_PREVIOUS_ACTIVITY "previous activity"
 
 namespace {
+    bool isPlatformX11()
+    {
+        static const bool isX11 = QX11Info::isPlatformX11();
+        return isX11;
+    }
+
     // Taken from kwin/tabbox/tabbox.cpp
-    Display* display()
+    Display* x11_display()
     {
         static Display *s_display = nullptr;
         if (!s_display) {
@@ -55,14 +65,14 @@ namespace {
         return s_display;
     }
 
-    bool areKeySymXsDepressed(bool bAll, const uint keySyms[], int nKeySyms) {
+    bool x11_areKeySymXsDepressed(bool bAll, const uint keySyms[], int nKeySyms) {
         char keymap[32];
 
-        XQueryKeymap(display(), keymap);
+        XQueryKeymap(x11_display(), keymap);
 
         for (int iKeySym = 0; iKeySym < nKeySyms; iKeySym++) {
             uint keySymX = keySyms[ iKeySym ];
-            uchar keyCodeX = XKeysymToKeycode(display(), keySymX);
+            uchar keyCodeX = XKeysymToKeycode(x11_display(), keySymX);
             int i = keyCodeX / 8;
             char mask = 1 << (keyCodeX - (i * 8));
 
@@ -86,7 +96,7 @@ namespace {
         return bAll;
     }
 
-    bool areModKeysDepressed(const QKeySequence& seq) {
+    bool x11_areModKeysDepressed(const QKeySequence& seq) {
         uint rgKeySyms[10];
         int nKeySyms = 0;
         if (seq.isEmpty()) {
@@ -116,17 +126,98 @@ namespace {
             rgKeySyms[nKeySyms++] = XK_Meta_R;
         }
 
-        return areKeySymXsDepressed(false, rgKeySyms, nKeySyms);
+        return x11_areKeySymXsDepressed(false, rgKeySyms, nKeySyms);
     }
 
-    bool isReverseTab(const QKeySequence &prevAction) {
+    bool x11_isReverseTab(const QKeySequence &prevAction) {
 
         if (prevAction == QKeySequence(Qt::ShiftModifier | Qt::Key_Tab)) {
-            return areModKeysDepressed(Qt::SHIFT);
+            return x11_areModKeysDepressed(Qt::SHIFT);
         } else {
             return false;
         }
     }
+
+    class ThumbnailImageResponse: public QQuickImageResponse {
+    public:
+        ThumbnailImageResponse(const QString &id, const QSize &requestedSize);
+
+        QQuickTextureFactory *textureFactory() const;
+
+        void run();
+
+    private:
+        QString m_id;
+        QSize m_requestedSize;
+        QQuickTextureFactory *m_texture;
+    };
+
+    ThumbnailImageResponse::ThumbnailImageResponse(const QString &id,
+                                                   const QSize &requestedSize)
+        : m_id(id)
+        , m_requestedSize(requestedSize)
+        , m_texture(Q_NULLPTR)
+    {
+        int width = m_requestedSize.width();
+        int height = m_requestedSize.height();
+
+        if (width <= 0) {
+            width = 320;
+        }
+
+        if (height <= 0) {
+            height = 240;
+        }
+
+        if (m_id.isEmpty()) {
+            emit finished();
+            return;
+        }
+
+        const auto file = QUrl::fromUserInput(m_id);
+
+        KFileItemList list;
+        list.append(KFileItem(file, QString(), 0));
+
+        auto job =
+            KIO::filePreview(list, QSize(width, height));
+        job->setScaleType(KIO::PreviewJob::Scaled);
+        job->setIgnoreMaximumSize(true);
+
+        connect(job, &KIO::PreviewJob::gotPreview,
+                this, [this,file] (const KFileItem& item, const QPixmap& pixmap) {
+                    Q_UNUSED(item);
+
+                    auto image = pixmap.toImage();
+
+                    m_texture = QQuickTextureFactory::textureFactoryForImage(image);
+                    emit finished();
+                }, Qt::QueuedConnection);
+
+        connect(job, &KIO::PreviewJob::failed,
+                this, [this,job] (const KFileItem& item) {
+                    Q_UNUSED(item);
+                    qWarning() << "SwitcherBackend: FAILED to get the thumbnail"
+                               << job->errorString()
+                               << job->detailedErrorStrings();
+                    emit finished();
+                });
+    }
+
+    QQuickTextureFactory *ThumbnailImageResponse::textureFactory() const
+    {
+        return m_texture;
+    }
+
+    class ThumbnailImageProvider: public QQuickAsyncImageProvider {
+    public:
+        QQuickImageResponse *requestImageResponse(const QString &id,
+                                                  const QSize &requestedSize)
+        {
+            return new ThumbnailImageResponse(id, requestedSize);
+        }
+    };
+
 
 
 } // local namespace
@@ -158,8 +249,6 @@ SwitcherBackend::SwitcherBackend(QObject *parent)
     , m_runningActivitiesModel(new SortedActivitiesModel({KActivities::Info::Running, KActivities::Info::Stopping}, this))
     , m_stoppedActivitiesModel(new SortedActivitiesModel({KActivities::Info::Stopped, KActivities::Info::Starting}, this))
 {
-    m_wallpaperCache = new KImageCache("activityswitcher_wallpaper_preview", 10485760);
-
     registerShortcut(ACTION_NAME_NEXT_ACTIVITY,
                      i18n("Walk through activities"),
                      Qt::META + Qt::Key_Tab,
@@ -182,21 +271,28 @@ SwitcherBackend::SwitcherBackend(QObject *parent)
 
 SwitcherBackend::~SwitcherBackend()
 {
-    delete m_wallpaperCache;
 }
 
 QObject *SwitcherBackend::instance(QQmlEngine *engine, QJSEngine *scriptEngine)
 {
-    Q_UNUSED(engine)
     Q_UNUSED(scriptEngine)
+    engine->addImageProvider("wallpaperthumbnail", new ThumbnailImageProvider());
     return new SwitcherBackend();
 }
 
 void SwitcherBackend::keybdSwitchToNextActivity()
 {
-    if (isReverseTab(m_actionShortcut[ACTION_NAME_PREVIOUS_ACTIVITY])) {
-        switchToActivity(Previous);
+    if (isPlatformX11()) {
+        // If we are on X11, we have all needed features for meta+tab
+        // to work properly
+        if (x11_isReverseTab(m_actionShortcut[ACTION_NAME_PREVIOUS_ACTIVITY])) {
+            switchToActivity(Previous);
+        } else {
+            switchToActivity(Next);
+        }
+
     } else {
+        // If we are on wayland, just switch to the next activity
         switchToActivity(Next);
     }
 }
@@ -239,13 +335,20 @@ void SwitcherBackend::showActivitySwitcherIfNeeded()
         return;
     }
 
-    if (!areModKeysDepressed(m_actionShortcut[actionName])) {
-        m_lastInvokedAction = Q_NULLPTR;
-        setShouldShowSwitcher(false);
-        return;
-    }
+    if (isPlatformX11()) {
+        if (!x11_areModKeysDepressed(m_actionShortcut[actionName])) {
+            m_lastInvokedAction = Q_NULLPTR;
+            setShouldShowSwitcher(false);
+            return;
+        }
 
-    setShouldShowSwitcher(true);
+        setShouldShowSwitcher(true);
+
+    } else {
+        // We are not showing the switcher on wayland
+        // TODO: This is a regression on wayland
+        setShouldShowSwitcher(false);
+    }
 
 }
 
@@ -312,72 +415,6 @@ void SwitcherBackend::setShouldShowSwitcher(const bool &shouldShowSwitcher)
     }
 
     emit shouldShowSwitcherChanged(m_shouldShowSwitcher);
-}
-
-QPixmap SwitcherBackend::wallpaperThumbnail(const QString &path, int width, int height,
-            const QJSValue &_callback)
-{
-    QPixmap preview = QPixmap(QSize(1, 1));
-
-    QJSValue callback(_callback);
-
-    if (path.isEmpty()) {
-        callback.call({false});
-        return preview;
-    }
-
-    if (width == 0) {
-        width = 320;
-    }
-
-    if (height == 0) {
-        height = 240;
-    }
-
-
-    const auto pixmapKey = path + "/"
-        + QString::number(width) + "x"
-        + QString::number(height);
-
-    if (m_wallpaperCache->findPixmap(pixmapKey, &preview)) {
-        return preview;
-    }
-
-    QUrl file(path);
-
-    if (!m_previewJobs.contains(file) && file.isValid()) {
-        m_previewJobs.insert(file);
-
-        KFileItemList list;
-        list.append(KFileItem(file, QString(), 0));
-
-        KIO::PreviewJob* job =
-            KIO::filePreview(list, QSize(width, height));
-        job->setScaleType(KIO::PreviewJob::Scaled);
-        job->setIgnoreMaximumSize(true);
-
-        connect(job, &KIO::PreviewJob::gotPreview,
-                this, [=] (const KFileItem& item, const QPixmap& pixmap) mutable {
-                    Q_UNUSED(item);
-                    m_wallpaperCache->insertPixmap(pixmapKey, pixmap);
-                    m_previewJobs.remove(path);
-
-                    callback.call({true});
-                });
-
-        connect(job, &KIO::PreviewJob::failed,
-                this, [=] (const KFileItem& item) mutable {
-                    Q_UNUSED(item);
-                    m_previewJobs.remove(path);
-
-                    qWarning() << "SwitcherBackend: FAILED to get the thumbnail for "
-                               << path << job->detailedErrorStrings(&file);
-                    callback.call({false});
-                });
-
-    }
-
-    return preview;
 }
 
 QAbstractItemModel *SwitcherBackend::runningActivitiesModel() const

@@ -36,17 +36,17 @@ function adjustMargin(height, margin) {
 }
 
 function launcherLayoutTasks() {
-    return Math.round(backend.tasksModel.launcherCount / Math.floor(preferredMinWidth() / launcherWidth()));
+    return Math.round(tasksModel.launcherCount / Math.floor(preferredMinWidth() / launcherWidth()));
 }
 
 function launcherLayoutWidthDiff() {
-    return (launcherLayoutTasks() * taskWidth()) - (backend.tasksModel.launcherCount * launcherWidth());
+    return (launcherLayoutTasks() * taskWidth()) - (tasksModel.launcherCount * launcherWidth());
 }
 
 function logicalTaskCount() {
-    var count = (backend.tasksModel.count - backend.tasksModel.launcherCount) + launcherLayoutTasks();
+    var count = (tasksModel.count - tasksModel.launcherCount) + launcherLayoutTasks();
 
-    return Math.max(backend.tasksModel.count ? 1 : 0, count);
+    return Math.max(tasksModel.count ? 1 : 0, count);
 }
 
 function maxStripes() {
@@ -78,10 +78,10 @@ function full() {
 }
 
 function optimumCapacity(width, height) {
-    var length = tasks.vertical ? height : width - (backend.tasksModel.launcherCount * launcherWidth());
+    var length = tasks.vertical ? height : width;
     var maximum = tasks.vertical ? preferredMaxHeight() : preferredMaxWidth();
 
-    return (Math.ceil(length / maximum) * maxStripes()) + backend.tasksModel.launcherCount;
+    return (Math.ceil(length / maximum) * maxStripes());
 }
 
 function layoutWidth() {
@@ -117,9 +117,13 @@ function preferredMaxWidth() {
         } else {
             return tasks.height + horizontalMargins();
         }
-    } else {
-        return Math.floor(preferredMinWidth() * 1.6);
     }
+
+    if (plasmoid.configuration.groupingStrategy != 0 && !plasmoid.configuration.groupPopups) {
+        return preferredMinWidth();
+    }
+
+    return Math.floor(preferredMinWidth() * 1.6);
 }
 
 function preferredMinHeight() {
@@ -156,7 +160,7 @@ function taskHeight() {
 }
 
 function launcherWidth() {
-    var baseWidth = tasks.vertical ? preferredMinHeight() : tasks.height;
+    var baseWidth = tasks.vertical ? preferredMinHeight() : Math.min(tasks.height, units.iconSizes.small * 3);
 
     return (baseWidth + horizontalMargins())
         - (adjustMargin(baseWidth, taskFrame.margins.top) + adjustMargin(baseWidth, taskFrame.margins.bottom));
@@ -165,14 +169,17 @@ function launcherWidth() {
 function layout(container) {
     var item;
     var stripes = calculateStripes();
-    var taskCount = backend.tasksModel.count - backend.tasksModel.launcherCount;
+    var taskCount = tasksModel.count - tasksModel.launcherCount;
     var width = taskWidth();
     var adjustedWidth = width;
     var height = taskHeight();
 
     if (!tasks.vertical && stripes == 1 && taskCount)
     {
-        width = Math.min(width + Math.floor(launcherLayoutWidthDiff() / taskCount), preferredMaxWidth());
+        var shrink = ((tasksModel.count - tasksModel.launcherCount) * preferredMaxWidth())
+            + (tasksModel.launcherCount * launcherWidth()) > taskList.width;
+        width = Math.min(shrink ? width + Math.floor(launcherLayoutWidthDiff() / taskCount) : width,
+            preferredMaxWidth());
     }
 
     for (var i = 0; i < container.count; ++i) {
@@ -182,19 +189,18 @@ function layout(container) {
             continue;
         }
 
-        item.visible = true;
-
         adjustedWidth = width;
 
-        if (!tasks.vertical && !tasks.iconsOnly) {
-            if (item.isLauncher) {
+        if (!tasks.vertical && !tasks.iconsOnly && (plasmoid.configuration.separateLaunchers || stripes == 1)) {
+            if (item.m.IsLauncher === true) {
                 adjustedWidth = launcherWidth();
-            } else if (stripes > 1 && i == backend.tasksModel.launcherCount) {
+            } else if (stripes > 1 && i == tasksModel.launcherCount) {
                 adjustedWidth += launcherLayoutWidthDiff();
             }
         }
 
         item.width = adjustedWidth;
         item.height = height;
+        item.visible = true;
     }
 }

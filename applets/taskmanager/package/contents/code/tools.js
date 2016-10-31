@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2012-2013 by Eike Hein <hein@kde.org>                   *
+ *   Copyright (C) 2012-2016 by Eike Hein <hein@kde.org>                   *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -17,7 +17,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
-function wheelActivateNextPrevTask(parentItem, wheelDelta, eventDelta) {
+function wheelActivateNextPrevTask(anchor, wheelDelta, eventDelta) {
     // magic number 120 for common "one click"
     // See: http://qt-project.org/doc/qt-5/qml-qtquick-wheelevent.html#angleDelta-prop
     wheelDelta += eventDelta;
@@ -31,40 +31,58 @@ function wheelActivateNextPrevTask(parentItem, wheelDelta, eventDelta) {
         increment--;
     }
     while (increment != 0) {
-        activateNextPrevTask(parentItem, increment < 0)
+        activateNextPrevTask(anchor, increment < 0)
         increment += (increment < 0) ? 1 : -1;
     }
 
     return wheelDelta;
 }
 
-function activateNextPrevTask(parentItem, next) {
-    var taskIdList;
+function activateNextPrevTask(anchor, next) {
+    // FIXME TODO: Unnecessarily convoluted and costly; optimize.
 
-    if (parentItem && parentItem.isGroupParent) {
-         taskIdList = backend.tasksModel.taskIdList(visualModel.modelIndex(parentItem.itemIndex));
-    } else {
-        taskIdList = backend.tasksModel.taskIdList();
+    var taskIndexList = [];
+    var activeTaskIndex = tasksModel.activeTask;
+
+    for (var i = 0; i < taskList.children.length - 1; ++i) {
+        var task = taskList.children[i];
+        var modelIndex = task.modelIndex(i);
+
+        if (task.m.IsLauncher !== true && task.m.IsStartup !== true) {
+            if (task.m.IsGroupParent === true) {
+                if (task == anchor) { // If the anchor is a group parent, collect only windows within the group.
+                    taskIndexList = [];
+                }
+
+                for (var j = 0; j < tasksModel.rowCount(modelIndex); ++j) {
+                    taskIndexList.push(tasksModel.makeModelIndex(i, j));
+                }
+
+                if (task == anchor) { // See above.
+                    break;
+                }
+            } else {
+                taskIndexList.push(modelIndex);
+            }
+        }
     }
 
-    if (!taskIdList.length) {
+    if (!taskIndexList.length) {
         return;
     }
 
-    var activeTaskId = backend.tasksModel.activeTaskId();
-    var target = taskIdList[0];
+    var target = taskIndexList[0];
 
-    for (var i = 0; i < taskIdList.length; ++i) {
-        if (taskIdList[i] == activeTaskId)
+    for (var i = 0; i < taskIndexList.length; ++i) {
+        if (taskIndexList[i] === activeTaskIndex)
         {
-            if (next && i < (taskIdList.length - 1)) {
-                target = taskIdList[i + 1];
-            } else if (!next)
-            {
+            if (next && i < (taskIndexList.length - 1)) {
+                target = taskIndexList[i + 1];
+            } else if (!next) {
                 if (i) {
-                    target = taskIdList[i - 1];
+                    target = taskIndexList[i - 1];
                 } else {
-                    target = taskIdList[taskIdList.length - 1];
+                    target = taskIndexList[taskIndexList.length - 1];
                 }
             }
 
@@ -72,27 +90,44 @@ function activateNextPrevTask(parentItem, next) {
         }
     }
 
-    activateItem(target, false);
+    tasksModel.requestActivate(target);
 }
 
-function insertionIndexAt(sourceIndex, x, y) {
-    var above = target.childAt(x, y);
-
-    if (above) {
-        var index = above.itemIndex;
-
-        if (index > sourceIndex) {
-            ++index;
+function activateTask(index, model, modifiers) {
+    if (modifiers & Qt.ShiftModifier) {
+        tasksModel.requestNewInstance(index);
+    } else if (model.IsGroupParent === true) {
+        if ((iconsOnly || modifiers == Qt.ControlModifier) && backend.canPresentWindows()) {
+            toolTip.hideToolTip();
+            tasks.presentWindows(model.LegacyWinIdList);
+        } else if (groupDialog.visible) {
+            groupDialog.visible = false;
+        } else {
+            groupDialog.visualParent = task;
+            groupDialog.visible = true;
         }
+    } else {
+        if (model.IsMinimized === true) {
+            tasksModel.requestToggleMinimized(index);
+            tasksModel.requestActivate(index);
+        } else if (model.IsActive === true) {
+            tasksModel.requestToggleMinimized(index);
+        } else {
+            tasksModel.requestActivate(index);
+        }
+    }
+}
 
-        return index;
+function insertIndexAt(above, x, y) {
+    if (above) {
+        return above.itemIndex;
     } else {
         var distance = tasks.vertical ? x : y;
         var step = tasks.vertical ? LayoutManager.taskWidth() : LayoutManager.taskHeight();
         var stripe = Math.ceil(distance / step);
 
-        if (stripe == LayoutManager.calculateStripes()) {
-            return -1;
+        if (stripe === LayoutManager.calculateStripes()) {
+            return tasksModel.count - 1;
         } else {
             return stripe * LayoutManager.tasksPerStripe();
         }
@@ -103,21 +138,16 @@ function publishIconGeometries(taskItems) {
     for (var i = 0; i < taskItems.length - 1; ++i) {
         var task = taskItems[i];
 
-        if (task.isGroupParent) {
-            var taskIdList = backend.tasksModel.taskIdList(visualModel.modelIndex(task.itemIndex));
-
-            for (var j = 0; j < taskIdList.length; ++j) {
-                tasks.itemGeometryChanged(task, taskIdList[j].itemId);
-            }
-        } else if (!task.isLauncher) {
-            tasks.itemGeometryChanged(task, task.itemId);
+        if (task.IsLauncher !== true && task.m.IsStartup !== true) {
+            tasksModel.requestPublishDelegateGeometry(tasksModel.makeModelIndex(task.itemIndex),
+                backend.globalRect(task), task);
         }
     }
 }
 
 function taskPrefix(prefix) {
-
     var effectivePrefix;
+
     switch (plasmoid.location) {
     case PlasmaCore.Types.LeftEdge:
         effectivePrefix = "west-" + prefix;

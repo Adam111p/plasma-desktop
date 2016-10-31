@@ -23,7 +23,7 @@ import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.draganddrop 2.0
 
-import org.kde.plasma.private.taskmanager 0.1 as TaskManager
+import org.kde.plasma.private.taskmanager 0.1 as TaskManagerApplet
 
 import "../code/layout.js" as LayoutManager
 import "../code/tools.js" as TaskTools
@@ -32,65 +32,56 @@ MouseArea {
     id: task
 
     width: groupDialog.mainItem.width
-    height: units.iconSizes.small + LayoutManager.verticalMargins()
+    height: Math.max(theme.mSize(theme.defaultFont).height, units.iconSizes.small) + LayoutManager.verticalMargins()
 
     visible: false
 
     LayoutMirroring.enabled: (Qt.application.layoutDirection == Qt.RightToLeft)
     LayoutMirroring.childrenInherit: (Qt.application.layoutDirection == Qt.RightToLeft)
 
+    readonly property var m: model
+
     property int itemIndex: index
-    property int itemId: model.Id
     property bool inPopup: false
-    property bool isGroupParent: model.hasModelChildren
-    property bool isLauncher: model.IsLauncher
-    property bool isStartup: model.IsStartup
-    property bool demandsAttention: model.DemandsAttention
-    property bool showingContextMenu: false
-    property int textWidth: label.implicitWidth
+    property bool isWindow: model.IsWindow === true
+    property alias textWidth: label.implicitWidth
     property bool pressed: false
     property int pressX: -1
     property int pressY: -1
-    property Item busyIndicator
+    property QtObject contextMenu: null
     property int wheelDelta: 0
-
-    readonly property bool smartLauncherEnabled: plasmoid.configuration.smartLaunchersEnabled && !inPopup && !isStartup
+    readonly property bool smartLauncherEnabled: plasmoid.configuration.smartLaunchersEnabled && !inPopup && model.IsStartup !== true
     property QtObject smartLauncherItem: null
 
+    readonly property bool highlighted: (inPopup && activeFocus) || (!inPopup && containsMouse)
+
     acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MidButton
-    hoverEnabled: true
+
+    onIsWindowChanged: {
+        if (isWindow) {
+            taskInitComponent.createObject(task);
+        }
+    }
 
     onItemIndexChanged: {
-        if (!inPopup && !tasks.vertical && LayoutManager.calculateStripes() > 1) {
-            var newWidth = LayoutManager.taskWidth();
-
-            if (index == backend.tasksModel.launcherCount) {
-                newWidth += LayoutManager.launcherLayoutWidthDiff();
-            }
-
-            width = newWidth;
+        if (!inPopup && !tasks.vertical
+            && (LayoutManager.calculateStripes() > 1 || !plasmoid.configuration.separateLaunchers)) {
+            tasks.requestLayout();
         }
-    }
-
-    onIsStartupChanged: {
-        if (!isStartup) {
-            tasks.itemGeometryChanged(task, itemId);
-            busyIndicator.visible = false;
-            busyIndicator.running = false;
-            icon.visible = true;
-        }
-    }
-
-    onDemandsAttentionChanged: {
-        tasks.updateStatus(demandsAttention);
     }
 
     onContainsMouseChanged:  {
-        if (!containsMouse) {
+        if (containsMouse) {
+            if (inPopup) {
+                forceActiveFocus()
+            }
+        } else {
             pressed = false;
         }
 
-        tasks.itemHovered(model.Id, containsMouse);
+        if (model.IsWindow === true) {
+            tasks.windowsHovered(model.LegacyWinIdList, containsMouse);
+        }
     }
 
     onPressed: {
@@ -103,34 +94,22 @@ MouseArea {
                 toolTip.hideToolTip();
             }
 
-            showingContextMenu = true;
-            tasks.itemContextMenu(task, plasmoid.action("configure"));
+            tasks.createContextMenu(task).show();
         }
     }
 
     onReleased: {
         if (pressed) {
             if (mouse.button == Qt.MidButton) {
-                if (plasmoid.configuration.middleClickAction == TaskManager.Backend.NewInstance) {
-                    tasks.launchNewInstance(model.Id);
-                } else if (plasmoid.configuration.middleClickAction == TaskManager.Backend.Close) {
-                    tasks.closeByItemId(model.Id);
+                if (plasmoid.configuration.middleClickAction == TaskManagerApplet.Backend.NewInstance) {
+                    tasksModel.requestNewInstance(modelIndex());
+                } else if (plasmoid.configuration.middleClickAction == TaskManagerApplet.Backend.Close) {
+                    tasksModel.requestClose(modelIndex());
+                } else if (plasmoid.configuration.middleClickAction == TaskManagerApplet.Backend.ToggleMinimized) {
+                    tasksModel.requestToggleMinimized(modelIndex());
                 }
             } else if (mouse.button == Qt.LeftButton) {
-                if (mouse.modifiers & Qt.ShiftModifier) {
-                    tasks.launchNewInstance(model.Id);
-                } else if (isGroupParent) {
-                    if ((iconsOnly || mouse.modifiers == Qt.ControlModifier) && backend.canPresentWindows()) {
-                        tasks.presentWindows(model.Id);
-                    } else if (groupDialog.visible) {
-                        groupDialog.visible = false;
-                    } else {
-                        groupDialog.visualParent = task;
-                        groupDialog.visible = true;
-                    }
-                } else {
-                    tasks.activateItem(model.Id, true);
-                }
+                TaskTools.activateTask(modelIndex(), model, mouse.modifiers);
             }
         }
 
@@ -144,7 +123,7 @@ MouseArea {
         if (pressX != -1 && mouse.buttons == Qt.LeftButton && dragHelper.isDrag(pressX, pressY, mouse.x, mouse.y)) {
             tasks.dragSource = task;
             dragHelper.startDrag(task, model.MimeType, model.MimeData,
-                model.LauncherUrl, model.DecorationRole);
+                model.LauncherUrlWithoutIcon, model.decoration);
             pressX = -1;
             pressY = -1;
 
@@ -155,28 +134,52 @@ MouseArea {
     onWheel: {
         if (plasmoid.configuration.wheelEnabled) {
             wheelDelta = TaskTools.wheelActivateNextPrevTask(task, wheelDelta, wheel.angleDelta.y);
+        } else {
+            wheel.accepted = false;
         }
     }
 
     onSmartLauncherEnabledChanged: {
         if (smartLauncherEnabled && !smartLauncherItem) {
             var smartLauncher = Qt.createQmlObject("
-    import org.kde.plasma.private.taskmanager 0.1 as TaskManager;
-    TaskManager.SmartLauncherItem { }", task);
+    import org.kde.plasma.private.taskmanager 0.1 as TaskManagerApplet;
+    TaskManagerApplet.SmartLauncherItem { }", task);
 
-            smartLauncher.launcherUrl = Qt.binding(function() { return model.LauncherUrl; });
+            smartLauncher.launcherUrl = Qt.binding(function() { return model.LauncherUrlWithoutIcon; });
 
             smartLauncherItem = smartLauncher;
         }
     }
 
-    Connections {
-        target: backend
+    Keys.onReturnPressed: TaskTools.activateTask(modelIndex(), model, event.modifiers)
+    Keys.onEnterPressed: Keys.onReturnPressed(event);
 
-        onShowingContextMenuChanged: {
-            if (task.showingContextMenu && !backend.showingContextMenu) {
-                task.showingContextMenu = false;
+    function modelIndex() {
+        return (inPopup ? tasksModel.makeModelIndex(groupDialog.visualParent.itemIndex, index)
+            : tasksModel.makeModelIndex(index));
+    }
+
+    Component {
+        id: taskInitComponent
+
+        Timer {
+            id: timer
+
+            interval: units.longDuration * 2
+            repeat: false
+
+            onTriggered: {
+                parent.hoverEnabled = true;
+
+                if (parent.isWindow) {
+                    tasksModel.requestPublishDelegateGeometry(parent.modelIndex(),
+                        backend.globalRect(parent), parent);
+                }
+
+                timer.destroy();
             }
+
+            Component.onCompleted: timer.start()
         }
     }
 
@@ -194,9 +197,14 @@ MouseArea {
 
         imagePath: "widgets/tasks"
         property string basePrefix: "normal"
-        prefix: TaskTools.taskPrefix("normal")
-        onRepaintNeeded: prefix = TaskTools.taskPrefix(basePrefix);
-        onBasePrefixChanged: prefix = TaskTools.taskPrefix(basePrefix);
+        prefix: TaskTools.taskPrefix(basePrefix)
+        onRepaintNeeded: updatePrefix()
+
+        function updatePrefix() {
+            prefix = Qt.binding(function() {
+                return TaskTools.taskPrefix(basePrefix);
+            });
+        }
 
         PlasmaCore.ToolTipArea {
             id: toolTip
@@ -209,23 +217,24 @@ MouseArea {
 
             mainItem: toolTipDelegate
 
-            //FIXME TODO: highlightWindows: plasmoid.configuration.highlightWindows
             onContainsMouseChanged:  {
                 if (containsMouse) {
+                    toolTipDelegate.parentIndex = itemIndex;
+
                     toolTipDelegate.windows = Qt.binding(function() {
-                        return model.WindowList;
+                        return model.LegacyWinIdList;
                     });
                     toolTipDelegate.mainText = Qt.binding(function() {
-                        return model.DisplayRole;
+                        return model.display;
                     });
                     toolTipDelegate.icon = Qt.binding(function() {
-                        return model.DecorationRole;
+                        return model.decoration;
                     });
                     toolTipDelegate.subText = Qt.binding(function() {
-                        return model.IsLauncher ? model.GenericName : toolTip.generateSubText(model);
+                        return model.IsLauncher === true ? model.GenericName : toolTip.generateSubText(model);
                     });
                     toolTipDelegate.launcherUrl = Qt.binding(function() {
-                        return model.LauncherUrl;
+                        return model.LauncherUrlWithoutIcon;
                     });
                 }
             }
@@ -233,23 +242,45 @@ MouseArea {
             function generateSubText(task) {
                 var subTextEntries = new Array();
 
-                if (!plasmoid.configuration.showOnlyCurrentDesktop && backend.numberOfDesktops() > 1) {
-                    subTextEntries.push(i18n("On %1", task.DesktopName));
+                if (!plasmoid.configuration.showOnlyCurrentDesktop
+                    && virtualDesktopInfo.numberOfDesktops > 1
+                    && model.IsOnAllVirtualDesktops !== true
+                    && model.VirtualDesktop != -1
+                    && model.VirtualDesktop != undefined) {
+                    subTextEntries.push(i18n("On %1", virtualDesktopInfo.desktopNames[model.VirtualDesktop - 1]));
                 }
 
-                if (task.OnAllActivities && backend.numberOfActivities() > 1) {
+                if (model.Activities == undefined) {
+                    return subTextEntries.join("\n");
+                }
+
+                if (model.Activities.length == 0 && activityInfo.numberOfRunningActivities > 1) {
                     subTextEntries.push(i18nc("Which virtual desktop a window is currently on",
                         "Available on all activities"));
-                } else if (plasmoid.configuration.showOnlyCurrentActivity) {
-                    if (task.OtherActivityNames.length > 0) {
-                        subTextEntries.push(i18nc("Activities a window is currently on (apart from the current one)",
-                                                "Also available on %1",
-                                                task.OtherActivityNames.join(", ")));
+                } else if (model.Activities.length > 0) {
+                   var activityNames = new Array();
+
+                    for (var i = 0; i < model.Activities.length; i++) {
+                        var activity = model.Activities[i];
+
+                        if (plasmoid.configuration.showOnlyCurrentActivity) {
+                            if (activity != activityInfo.currentActivity) {
+                                activityNames.push(activityInfo.activityName(model.Activities[i]));
+                            }
+                        } else if (activity != activityInfo.currentActivity) {
+                            activityNames.push(activityInfo.activityName(model.Activities[i]));
+                        }
                     }
-                } else if (task.ActivityNames.length > 0) {
-                    subTextEntries.push(i18nc("Which activities a window is currently on",
-                                            "Available on %1",
-                                            task.ActivityNames.join(", ")));
+
+                    if (plasmoid.configuration.showOnlyCurrentActivity) {
+                        if (activityNames.length > 0) {
+                            subTextEntries.push(i18nc("Activities a window is currently on (apart from the current one)",
+                                "Also available on %1", activityNames.join(", ")));
+                        }
+                    } else if (activityNames.length > 0) {
+                        subTextEntries.push(i18nc("Which activities a window is currently on",
+                            "Available on %1", activityNames.join(", ")));
+                    }
                 }
 
                 return subTextEntries.join("\n");
@@ -269,14 +300,16 @@ MouseArea {
 
         anchors {
             left: parent.left
-            leftMargin: tasks.vertical && !label.visible ? adjustMargin(true, parent.width, taskFrame.margins.left) : taskFrame.margins.left
+            leftMargin: adjustMargin(true, parent.width, taskFrame.margins.left)
             top: parent.top
-            topMargin: adjustMargin(false, parent.height, taskFrame.margins.top);
-            bottom: parent.bottom
-            bottomMargin: adjustMargin(false, parent.height, taskFrame.margins.bottom);
-            right: (tasks.vertical && !label.visible && !inPopup) ? parent.right : undefined
-            rightMargin: tasks.vertical && !label.visible ? adjustMargin(true, parent.width, taskFrame.margins.right) : undefined
+            topMargin: adjustMargin(false, parent.height, taskFrame.margins.top)
         }
+
+        width: (label.visible ? height
+            : parent.width - adjustMargin(true, parent.width, taskFrame.margins.left)
+            - adjustMargin(true, parent.width, taskFrame.margins.right))
+        height: (parent.height - adjustMargin(false, parent.height, taskFrame.margins.top)
+            - adjustMargin(false, parent.height, taskFrame.margins.bottom))
 
         function adjustMargin(vert, size, margin) {
             if (!size) {
@@ -292,26 +325,18 @@ MouseArea {
             return margin;
         }
 
-        width: inPopup ? units.iconSizes.small : Math.min(height, parent.width - LayoutManager.horizontalMargins())
+        //width: inPopup ? units.iconSizes.small : Math.min(height, parent.width - LayoutManager.horizontalMargins())
 
         PlasmaCore.IconItem {
             id: icon
 
             anchors.fill: parent
 
-            visible: false
-
-            active: task.containsMouse || task.showingContextMenu
+            active: task.highlighted || (task.contextMenu && task.contextMenu.status == PlasmaComponents.DialogStatus.Open)
             enabled: true
             usesPlasmaTheme: false
 
-            source: model.DecorationRole
-
-            onVisibleChanged: {
-                if (visible && busyIndicator) {
-                    busyIndicator.destroy();
-                }
-            }
+            source: model.decoration
         }
 
         Loader {
@@ -319,17 +344,7 @@ MouseArea {
             asynchronous: true
             source: "TaskBadgeOverlay.qml"
             active: plasmoid.configuration.smartLaunchersEnabled && height >= units.iconSizes.small
-                    && icon.visible && task.smartLauncherItem && task.smartLauncherItem.countVisible
-        }
-
-        PlasmaComponents.BusyIndicator {
-            id: busyIndicator
-
-            anchors.fill: parent
-
-            visible: false
-
-            running: false
+                    && task.smartLauncherItem && task.smartLauncherItem.countVisible
         }
 
         states: [
@@ -351,10 +366,26 @@ MouseArea {
                 }
             }
         ]
+
+        Loader {
+            anchors.fill: parent
+
+            active: model.IsStartup === true
+            sourceComponent: busyIndicator
+        }
+
+        Component {
+            id: busyIndicator
+
+            PlasmaComponents.BusyIndicator { anchors.fill: parent }
+        }
     }
 
-    TaskManager.TextLabel {
+    PlasmaComponents.Label {
         id: label
+
+        visible: (inPopup || !iconsOnly && model.IsLauncher !== true
+            && (parent.width - iconBox.height - units.smallSpacing) >= (theme.mSize(theme.defaultFont).width * 7))
 
         anchors {
             fill: parent
@@ -364,19 +395,17 @@ MouseArea {
             bottomMargin: taskFrame.margins.bottom
         }
 
-        visible: (inPopup || !iconsOnly && !model.IsLauncher && (parent.width - LayoutManager.horizontalMargins()) >= (theme.mSize(theme.defaultFont).width * 7))
-
-        enabled: true
-
-        text: (!inPopup && iconsOnly) ? "" : model.DisplayRole
-        color: theme.textColor
-        elide: !inPopup
+        text: model.display
+        wrapMode: Text.Wrap
+        elide: Text.ElideRight
+        textFormat: Text.PlainText
+        verticalAlignment: Text.AlignVCenter
     }
 
     states: [
         State {
             name: "launcher"
-            when: model.IsLauncher
+            when: model.IsLauncher === true
 
             PropertyChanges {
                 target: frame
@@ -385,7 +414,7 @@ MouseArea {
         },
         State {
             name: "hovered"
-            when: containsMouse || showingContextMenu
+            when: task.highlighted || (contextMenu.status == PlasmaComponents.DialogStatus.Open && contextMenu.visualParent == task)
 
             PropertyChanges {
                 target: frame
@@ -394,7 +423,7 @@ MouseArea {
         },
         State {
             name: "attention"
-            when: model.DemandsAttention || (task.smartLauncherItem && task.smartLauncherItem.urgent)
+            when: model.IsDemandingAttention === true || (task.smartLauncherItem && task.smartLauncherItem.urgent)
 
             PropertyChanges {
                 target: frame
@@ -403,7 +432,7 @@ MouseArea {
         },
         State {
             name: "minimized"
-            when: model.Minimized && !(groupDialog.visible && groupDialog.target == task)
+            when: model.IsMinimized === true && !(groupDialog.visible && groupDialog.visualParent == task)
 
             PropertyChanges {
                 target: frame
@@ -412,7 +441,7 @@ MouseArea {
         },
         State {
             name: "active"
-            when: model.Active || groupDialog.visible && groupDialog.target == task
+            when: model.IsActive === true || groupDialog.visible && groupDialog.visualParent == task
 
             PropertyChanges {
                 target: frame
@@ -422,23 +451,13 @@ MouseArea {
     ]
 
     Component.onCompleted: {
-        if (model.IsStartup) {
-            busyIndicator.running = true;
-            busyIndicator.visible = true;
-        } else {
-            icon.visible = true;
-        }
-
-        if (model.hasModelChildren) {
+        if (!inPopup && model.IsWindow === true) {
             var component = Qt.createComponent("GroupExpanderOverlay.qml");
             component.createObject(task);
         }
-    }
-/*
-    Component.onDestruction: {
-        if (groupDialog.visible && groupDialog.groupItemId == model.Id) {
-            groupDialog.visible = false;
+
+        if (!inPopup && model.IsWindow !== true) {
+            taskInitComponent.createObject(task);
         }
     }
-*/
 }

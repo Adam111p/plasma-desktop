@@ -29,12 +29,14 @@
 #include <QPalette>
 #include <QFile>
 #include <KZip>
-#include <KTempDir>
-#include <KMimeType>
-#include <KStandardDirs>
-#include <KDebug>
+#include <QTemporaryDir>
+#include <QMimeDatabase>
+#include <QDebug>
+#include <QDir>
 
-#define KFI_DBUG kDebug(7115)
+#include "debug.h"
+
+#define KFI_DBUG qCDebug(KCM_KFONTINST_THUMBNAIL)
 
 extern "C"
 {
@@ -54,12 +56,13 @@ CFontThumbnail::CFontThumbnail()
 bool CFontThumbnail::create(const QString &path, int width, int height, QImage &img)
 {
     QString  realPath(path);
-    KTempDir *tempDir = 0;
+    QTemporaryDir *tempDir = 0;
 
     KFI_DBUG << "Create font thumbnail for:" << path << endl;
 
     // Is this a appliaction/vnd.kde.fontspackage file? If so, extract 1 scalable font...
-    if(Misc::isPackage(path) || "application/zip"==KMimeType::findByFileContent(path)->name())
+    QMimeDatabase db;
+    if (Misc::isPackage(path) || "application/zip" == db.mimeTypeForFile(path, QMimeDatabase::MatchContent).name())
     {
         KZip zip(path);
 
@@ -83,21 +86,21 @@ bool CFontThumbnail::create(const QString &path, int width, int height, QImage &
                         if(entry && entry->isFile())
                         {
                             delete tempDir;
-                            tempDir=new KTempDir(KStandardDirs::locateLocal("tmp", KFI_TMP_DIR_PREFIX));
+                            tempDir=new QTemporaryDir(QDir::tempPath() + "/" KFI_TMP_DIR_PREFIX);
                             tempDir->setAutoRemove(true);
 
-                            ((KArchiveFile *)entry)->copyTo(tempDir->name());
+                            ((KArchiveFile *)entry)->copyTo(tempDir->path());
 
-                            QString mime(KMimeType::findByPath(tempDir->name()+entry->name())->name());
+                            QString mime(db.mimeTypeForFile(tempDir->path()+QLatin1Char('/')+entry->name()).name());
 
                             if(mime=="application/x-font-ttf" || mime=="application/x-font-otf" ||
                                mime=="application/x-font-type1")
                             {
-                                realPath=tempDir->name()+entry->name();
+                                realPath=tempDir->path()+QLatin1Char('/')+entry->name();
                                 break;
                             }
                             else
-                                ::unlink(QFile::encodeName(tempDir->name()+entry->name()).data());
+                                ::unlink(QFile::encodeName(tempDir->path()+QLatin1Char('/')+entry->name()).data());
                         }
                     }
                 }

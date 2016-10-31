@@ -61,8 +61,8 @@ Item {
 
     visible: false
 
-    onMinimumWidthChanged: appletItem.width = Math.max(minimumWidth, width);
-    onMinimumHeightChanged: appletItem.height = Math.max(minimumHeight, height);
+    onMinimumWidthChanged: if (!widthAnimation.running) appletItem.width = Math.max(minimumWidth, width);
+    onMinimumHeightChanged: if (!heightAnimation.running) appletItem.height = Math.max(minimumHeight, height);
 
     function updateBackgroundHints() {
         hasBackground = (applet.backgroundHints != "NoBackground");
@@ -81,8 +81,6 @@ Item {
         }
         //print("Backgroundhints changed: " + appletItem.imagePath);
     }
-
-    Rectangle { color: Qt.rgba(0,0,0,0); border.width: 3; border.color: "white"; opacity: 0.5; visible: debug; anchors.fill: parent; }
 
     KQuickControlsAddons.MouseEventListener {
         id: mouseListener
@@ -104,7 +102,7 @@ Item {
 
         onPressAndHold: {
             if (!plasmoid.immutable && plasmoid.configuration.pressToMove) {
-                if (!dragMouseArea.dragging && !systemSettings.isDrag(pressX, pressY, mouse.x, mouse.y)) {
+                if (!dragMouseArea.dragging && !root.isDrag(pressX, pressY, mouse.x, mouse.y)) {
                     showAppletHandle = true;
 
                     dragMouseArea.dragging = true;
@@ -229,9 +227,7 @@ Item {
                     appletItem.z = appletItem.z + zoffset;
                     animationsEnabled = plasmoid.configuration.pressToMove ? true : false;
                     mouse.accepted = true;
-                    var x = Math.round(appletItem.x / root.layoutManager.cellSize.width) * root.layoutManager.cellSize.width;
-                    var y = Math.round(appletItem.y / root.layoutManager.cellSize.height) * root.layoutManager.cellSize.height;
-                    root.layoutManager.setSpaceAvailable(x, y, appletItem.width, appletItem.height, true);
+                    root.layoutManager.setSpaceAvailable(appletItem.x, appletItem.y, appletItem.width, appletItem.height, true);
 
                     placeHolder.syncWithItem(appletItem);
                     placeHolderPaint.opacity = root.haloOpacity;
@@ -336,7 +332,7 @@ Item {
                     anchors.centerIn: parent
                     z: appletContainer.z + 1
                 }
-//                 Rectangle { color: "green"; opacity: 0.3; visible: debug; anchors.fill: parent; }
+
                 Component.onCompleted: PlasmaExtras.AppearAnimation {
                     targetItem: appletItem
                 }
@@ -399,8 +395,6 @@ Item {
                     appletHandle.forceFloating = rightOutside > 0;
                 }
             }
-
-//             Rectangle { color: "orange"; opacity: 0.1; visible: debug; anchors.fill: parent; }
         }
     }
 

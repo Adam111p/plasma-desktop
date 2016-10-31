@@ -23,10 +23,9 @@
 
 #include <QtDBus/QDBusConnection>
 #include <QtCore/QTimer>
+#include <QDebug>
 #include <kauth.h>
-#include <KDebug>
 #include <kio/global.h>
-#include <kde_file.h>
 #include <fontconfig/fontconfig.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -39,7 +38,7 @@
 #include "Utils.h"
 #include "FontinstIface.h"
 
-#define KFI_DBUG kDebug() << time(0L)
+#define KFI_DBUG qDebug() << time(0L)
 
 namespace KFI
 {
@@ -426,12 +425,10 @@ void FontInst::move(const QString &family, quint32 style, bool toSystem, int pid
 
 static bool renameFontFile(const QString &from, const QString &to, int uid=-1, int gid=-1)
 {
-    QByteArray src(QFile::encodeName(from)),
-               dest(QFile::encodeName(to));
-
-    if(KDE_rename(src.data(), dest.data()))
+    if (!QFile::rename(from, to))
         return false;
 
+    QByteArray dest(QFile::encodeName(to));
     Misc::setFilePerms(dest);
     if(-1!=uid && -1!=gid)
         ::chown(dest.data(), uid, gid);

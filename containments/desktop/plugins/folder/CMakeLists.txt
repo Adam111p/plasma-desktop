@@ -1,5 +1,4 @@
 include_directories(plasmaquick)
-include_directories(internallibkonq)
 
 set(folderplugin_SRCS
     directorypicker.cpp
@@ -17,8 +16,7 @@ set(folderplugin_SRCS
     textfix.cpp
     viewpropertiesmenu.cpp
     wheelinterceptor.cpp
-    internallibkonq/konq_copytomenu.cpp
-    internallibkonq/konq_popupmenu.cpp
+    shortcut.cpp
 )
 
 install(FILES qmldir DESTINATION ${QML_INSTALL_DIR}/org/kde/private/desktopcontainment/folder)
@@ -33,6 +31,7 @@ target_link_libraries(folderplugin
                       KF5::KIOWidgets
                       KF5::KIOFileWidgets
                       KF5::I18n
-                      KF5::PlasmaQuick)
+                      KF5::PlasmaQuick
+                      KF5::ConfigGui)
 
 install(TARGETS folderplugin DESTINATION ${QML_INSTALL_DIR}/org/kde/private/desktopcontainment/folder)

@@ -19,7 +19,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-import QtQuick 2.0
+import QtQuick 2.2
 import org.kde.plasma.core 2.0 as PlasmaCore
 import org.kde.plasma.components 2.0 as PlasmaComponents
 import org.kde.kquickcontrolsaddons 2.0 as KQuickControlsAddons
@@ -70,6 +70,18 @@ Item {
             placeToolBox(plasmoid.configuration.ToolBoxButtonState);
             toolBoxButton.visible = true
         }
+
+        Behavior on x {
+            XAnimator { duration: units.longDuration; easing.type: Easing.InOutQuad }
+            // avoid the toolbox sliding over the screen on startup
+            // placeToolBox is initially called before the toolBoxButton is visible
+            // so those Behaviors won't fire on startup
+            enabled: toolBoxButton.visible
+        }
+        Behavior on y {
+            YAnimator { duration: units.longDuration; easing.type: Easing.InOutQuad }
+            enabled: toolBoxButton.visible
+        }
     }
 
     Timer {
@@ -92,6 +104,10 @@ Item {
             hideOnWindowDeactivate: true
             mainItem: ToolBoxItem {
                 id: dialog
+
+                LayoutMirroring.enabled: Qt.application.layoutDirection === Qt.RightToLeft
+                LayoutMirroring.childrenInherit: true
+
                 Timer {
                     id: visibleTimer
                     interval: 300

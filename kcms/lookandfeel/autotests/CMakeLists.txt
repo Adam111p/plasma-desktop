@@ -15,6 +15,8 @@ qt5_add_dbus_interface(kcmTest_SRCS ${klauncher_xml} klauncher_iface)
 
 add_executable(kcmTest ${kcmTest_SRCS})
 
+add_dependencies(kcmTest kcm_lookandfeel)
+
 target_link_libraries(kcmTest
         Qt5::Test
         KF5::KIOWidgets
@@ -26,6 +28,7 @@ target_link_libraries(kcmTest
         KF5::KDELibs4Support
         KF5::Declarative
         KF5::QuickAddons
+        KF5::NewStuff
 
         Qt5::DBus
         Qt5::Widgets

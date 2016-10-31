@@ -24,7 +24,8 @@ import QtQuick 2.0
 import org.kde.plasma.components 2.0 as PlasmaComponents
 
 MouseArea {
-    property int winId
+    property var modelIndex
+    property int winId // FIXME Legacy
     property Item thumbnailItem
 
     acceptedButtons: Qt.LeftButton
@@ -32,12 +33,12 @@ MouseArea {
     enabled: winId != 0
 
     onClicked: {
-        tasks.activateWindow(winId);
+        tasksModel.requestActivate(modelIndex);
         toolTip.hideToolTip();
     }
 
     onContainsMouseChanged: {
-        tasks.windowHovered(winId, containsMouse);
+        tasks.windowsHovered([winId], containsMouse);
     }
 
     PlasmaComponents.ToolButton {
@@ -52,9 +53,6 @@ MouseArea {
         visible: parent.containsMouse && winId != 0
         tooltip: i18nc("close this window", "Close")
 
-        onClicked: {
-            tasks.closeByWinId(winId);
-            toolTip.hideToolTip();
-        }
+        onClicked: tasksModel.requestClose(modelIndex);
     }
 }

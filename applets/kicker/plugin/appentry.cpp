@@ -17,6 +17,7 @@
  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA .        *
  ***************************************************************************/
 
+#include <config-workspace.h>
 #include "appentry.h"
 #include "actionlist.h"
 #include "appsmodel.h"
@@ -46,6 +47,8 @@
 #include <KShell>
 #include <KSharedConfig>
 #include <KStartupInfo>
+
+#include <Plasma/Plasma>
 
 MenuEntryEditor *AppEntry::m_menuEntryEditor = nullptr;
 
@@ -84,8 +87,6 @@ void AppEntry::init(NameFormat nameFormat)
         m_description = nameFromService(m_service, GenericNameOnly);
     }
 
-    m_icon = QIcon::fromTheme(m_service->icon(), QIcon::fromTheme("unknown"));
-
     if (!m_menuEntryEditor) {
         m_menuEntryEditor = new MenuEntryEditor();
     }
@@ -98,6 +99,9 @@ bool AppEntry::isValid() const
 
 QIcon AppEntry::icon() const
 {
+    if (m_icon.isNull()) {
+        m_icon = QIcon::fromTheme(m_service->icon(), QIcon::fromTheme("unknown"));
+    }
     return m_icon;
 }
 
@@ -146,8 +150,10 @@ QVariantList AppEntry::actions() const
 
     QObject *appletInterface = m_owner->rootModel()->property("appletInterface").value<QObject *>();
 
+    const bool systemImmutable = appletInterface->property("immutability").toInt() == Plasma::Types::SystemImmutable;
+
     const QVariantList &addLauncherActions = Kicker::createAddLauncherActionList(appletInterface, m_service);
-    if (!addLauncherActions.isEmpty()) {
+    if (!systemImmutable && !addLauncherActions.isEmpty()) {
         actionList << addLauncherActions
                    << Kicker::createSeparatorActionItem();
     }
@@ -155,6 +161,12 @@ QVariantList AppEntry::actions() const
     const QVariantList &recentDocuments = Kicker::recentDocumentActions(m_service);
     if (!recentDocuments.isEmpty()) {
         actionList << recentDocuments << Kicker::createSeparatorActionItem();
+    }
+
+    // Don't allow adding launchers, editing, hiding, or uninstalling applications
+    // when system is immutable.
+    if (systemImmutable) {
+        return actionList;
     }
 
     if (m_menuEntryEditor->canEdit(m_service->entryPath())) {
@@ -166,7 +178,7 @@ QVariantList AppEntry::actions() const
     }
 
 #ifdef PackageKitQt5_FOUND
-    QStringList files(m_service->entryPath());
+    /*QStringList files(m_service->entryPath());
 
     if (m_service->isApplication()) {
         files += QStandardPaths::findExecutable(KShell::splitArgs(m_service->exec()).first());
@@ -180,7 +192,7 @@ QVariantList AppEntry::actions() const
         QVariantMap removeAction = Kicker::createActionItem(i18n("Remove '%1'...", packageName), "removeApplication", packageName);
         removeAction["icon"] = "applications-other";
         actionList << removeAction;
-    }
+    }*/
 #endif
 
     QQmlPropertyMap *appletConfig = qobject_cast<QQmlPropertyMap *>(appletInterface->property("configuration").value<QObject *>());
@@ -207,8 +219,8 @@ bool AppEntry::run(const QString& actionId, const QVariant &argument)
         }
 #endif
 
-        new KRun(QUrl::fromLocalFile(m_service->entryPath()), 0, true,
-            KStartupInfo::createNewStartupIdForTimestamp(timeStamp));
+        // TODO Once we depend on KDE Frameworks 5.24 and D1902 is merged, use KRun::runApplication instead
+        KRun::runService(*m_service, {}, nullptr, true, {}, KStartupInfo::createNewStartupIdForTimestamp(timeStamp));
 
         KActivities::ResourceInstance::notifyAccessed(QUrl("applications:" + m_service->storageId()),
             "org.kde.plasma.kicker");
@@ -280,11 +292,10 @@ KService::Ptr AppEntry::defaultAppByName(const QString& name)
 }
 
 AppGroupEntry::AppGroupEntry(AppsModel *parentModel, KServiceGroup::Ptr group,
-    bool flat, bool separators, int appNameFormat) : AbstractGroupEntry(parentModel)
+    bool flat, bool sorted, bool separators, int appNameFormat) : AbstractGroupEntry(parentModel),
+    m_group(group)
 {
-    m_name = group->caption();
-    m_icon = QIcon::fromTheme(group->icon(), QIcon::fromTheme("unknown"));
-    AppsModel* model = new AppsModel(group->entryPath(), flat, separators, parentModel);
+    AppsModel* model = new AppsModel(group->entryPath(), flat, sorted, separators, parentModel);
     model->setAppNameFormat(appNameFormat);
     m_childModel = model;
 
@@ -301,12 +312,15 @@ AppGroupEntry::AppGroupEntry(AppsModel *parentModel, KServiceGroup::Ptr group,
 
 QIcon AppGroupEntry::icon() const
 {
+    if (m_icon.isNull()) {
+        m_icon = QIcon::fromTheme(m_group->icon(), QIcon::fromTheme("unknown"));
+    }
     return m_icon;
 }
 
 QString AppGroupEntry::name() const
 {
-    return m_name;
+    return m_group->caption();
 }
 
 bool AppGroupEntry::hasChildren() const

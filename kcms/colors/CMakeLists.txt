@@ -1,12 +1,62 @@
 # KI18N Translation Domain for this library
 add_definitions(-DTRANSLATION_DOMAIN=\"kcmcolors\")
 
-set(kcm_colors_SRCS ../krdb/krdb.cpp colorscm.cpp previewwidget.cpp setpreviewwidget.cpp)
+set(scheme_editor_SRCS
+    kcolorschemeeditor.cpp
+    scmeditordialog.cpp
+    scmeditoroptions.cpp
+    scmeditorcolors.cpp
+    scmeditoreffects.cpp
+    previewwidget.cpp
+    setpreviewwidget.cpp
+    )
+
+ki18n_wrap_ui(scheme_editor_SRCS
+    scmeditordialog.ui
+    scmeditoroptions.ui
+    scmeditorcolors.ui
+    scmeditoreffects.ui
+    preview.ui
+    setpreview.ui
+    )
+
+add_executable(kcolorschemeeditor ${scheme_editor_SRCS})
+
+target_link_libraries(kcolorschemeeditor
+    KF5::KCMUtils
+    KF5::GuiAddons
+    KF5::I18n
+    KF5::KIOCore
+    KF5::CoreAddons
+    KF5::NewStuff
+    )
+install(TARGETS kcolorschemeeditor  DESTINATION ${INSTALL_TARGETS_DEFAULT_ARGS})
+install(FILES org.kde.kcolorschemeeditor.desktop  DESTINATION  ${XDG_APPS_INSTALL_DIR})
+
+# ----------------
+
+set(kcm_colors_SRCS
+    ../krdb/krdb.cpp
+    colorscm.cpp
+    scmeditordialog.cpp
+    scmeditoroptions.cpp
+    scmeditorcolors.cpp
+    scmeditoreffects.cpp
+    previewwidget.cpp
+    setpreviewwidget.cpp
+    )
 
 set(klauncher_xml ${KINIT_DBUS_INTERFACES_DIR}/kf5_org.kde.KLauncher.xml)
 qt5_add_dbus_interface(kcm_colors_SRCS ${klauncher_xml} klauncher_iface)
 
-ki18n_wrap_ui(kcm_colors_SRCS colorsettings.ui preview.ui setpreview.ui)
+ki18n_wrap_ui(kcm_colors_SRCS
+    colorsettings.ui
+    scmeditordialog.ui
+    scmeditoroptions.ui
+    scmeditorcolors.ui
+    scmeditoreffects.ui
+    preview.ui
+    setpreview.ui)
 
 add_library(kcm_colors MODULE ${kcm_colors_SRCS})
 target_link_libraries(kcm_colors

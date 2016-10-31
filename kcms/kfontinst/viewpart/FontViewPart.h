@@ -39,9 +39,8 @@ class QPushButton;
 class QLabel;
 class QProcess;
 class QAction;
-class KAction;
-class KIntNumInput;
-class KTempDir;
+class QSpinBox;
+class QTemporaryDir;
 
 namespace KFI
 {
@@ -91,14 +90,14 @@ class CFontViewPart : public KParts::ReadOnlyPart
     QFrame             *itsFrame;
     QLabel             *itsFaceLabel;
 //                       *itsMetaLabel;
-    KIntNumInput       *itsFaceSelector;
+    QSpinBox           *itsFaceSelector;
     QAction            *itsChangeTextAction;
     int                itsFace;
     KSharedConfigPtr   itsConfig;
     BrowserExtension   *itsExtension;
     QProcess           *itsProc;
 //    KUrl               itsMetaUrl;
-    KTempDir           *itsTempDir;
+    QTemporaryDir      *itsTempDir;
     Misc::TFont        itsFontDetails;
     FontInstInterface  *itsInterface;
     bool               itsOpening;

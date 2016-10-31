@@ -32,12 +32,12 @@
 #include <KConfig>
 #include <KIO/Job>
 
-class KPushButton;
-class KProgressDialog;
-class KTempDir;
+class QPushButton;
+class QProgressDialog;
+class QTemporaryDir;
 class KToggleAction;
 class KActionMenu;
-class KAction;
+class QAction;
 class QLabel;
 class QMenu;
 class QProcess;
@@ -118,7 +118,7 @@ class CKCmFontInst : public KCModule
     CGroupList       *itsGroupList;
     CGroupListView   *itsGroupListView;
     KActionMenu      *itsToolsMenu;
-    KPushButton      *itsDeleteGroupControl,
+    QPushButton      *itsDeleteGroupControl,
                      *itsEnableGroupControl,
                      *itsDisableGroupControl,
                      *itsAddFontControl,
@@ -126,16 +126,16 @@ class CKCmFontInst : public KCModule
     CFontFilter      *itsFilter;
     QString          itsLastStatusBarMsg;
     KIO::Job         *itsJob;
-    KProgressDialog  *itsProgress;
+    QProgressDialog  *itsProgress;
     CUpdateDialog    *itsUpdateDialog;
-    KTempDir         *itsTempDir;
+    QTemporaryDir    *itsTempDir;
     QProcess         *itsPrintProc;
     QSet<QString>    itsDeletedFonts;
     QList<QUrl>       itsModifiedUrls;
     CJobRunner       *itsRunner;
     QMenu            *itsPreviewMenu,
                      *itsPreviewListMenu;
-    KAction          *itsDownloadFontsAct;
+    QAction          *itsDownloadFontsAct;
     QWidget          *itsPreviewWidget;
     bool             itsPreviewHidden;
 };

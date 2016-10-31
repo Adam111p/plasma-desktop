@@ -1,5 +1,5 @@
 /*
- *   Copyright (C) 2016 <ivan.cukic(at)kde.org>
+ *   Copyright (C) 2016 Ivan Cukic <ivan.cukic(at)kde.org>
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License version 2,
@@ -23,9 +23,10 @@
 // Qt
 #include <QColor>
 #include <QObject>
+#include <QTimer>
 
 // KDE
-#include <KConfig>
+#include <KSharedConfig>
 #include <KConfigGroup>
 #include <KDirWatch>
 #include <KLocalizedString>
@@ -36,43 +37,49 @@
 #include <KWindowSystem>
 #include <QX11Info>
 
+#define PLASMACONFIG "plasma-org.kde.plasma.desktop-appletsrc"
+
 namespace {
 
-    class BackgroundCache {
+    class BackgroundCache: public QObject {
     public:
         BackgroundCache()
             : initialized(false)
-            , plasmaConfig("plasma-org.kde.plasma.desktop-appletsrc")
+            , plasmaConfig(KSharedConfig::openConfig(PLASMACONFIG))
         {
             using namespace std::placeholders;
 
             const auto configFile = QStandardPaths::writableLocation(
                                         QStandardPaths::GenericConfigLocation) +
-                                    QLatin1Char('/') + plasmaConfig.name();
+                                    QLatin1Char('/') + PLASMACONFIG;
 
             KDirWatch::self()->addFile(configFile);
 
             QObject::connect(KDirWatch::self(), &KDirWatch::dirty,
-                             [this] (const QString &file) { settingsFileChanged(file); });
+                             this, &BackgroundCache::settingsFileChanged,
+                             Qt::QueuedConnection);
             QObject::connect(KDirWatch::self(), &KDirWatch::created,
-                             [this] (const QString &file) { settingsFileChanged(file); });
+                             this, &BackgroundCache::settingsFileChanged,
+                             Qt::QueuedConnection);
+
         }
 
         void settingsFileChanged(const QString &file)
         {
-            if (!file.endsWith(plasmaConfig.name())) return;
-
-            plasmaConfig.reparseConfiguration();
+            if (!file.endsWith(PLASMACONFIG)) {
+                return;
+            }
 
             if (initialized) {
-                reload(false);
+                plasmaConfig->reparseConfiguration();
+                reload();
             }
         }
 
         void subscribe(SortedActivitiesModel *model)
         {
             if (!initialized) {
-                reload(true);
+                reload();
             }
 
             models << model;
@@ -108,9 +115,10 @@ namespace {
             return QString();
         }
 
-        void reload(bool)
+        void reload()
         {
             auto newForActivity = forActivity;
+            QHash<QString, int> lastScreenForActivity;
 
             // contains activities for which the wallpaper
             // has updated
@@ -123,6 +131,7 @@ namespace {
             // containments that define activities in plasma
             for (const auto& containmentId: plasmaConfigContainments().groupList()) {
                 const auto containment = plasmaConfigContainments().group(containmentId);
+                const auto lastScreen  = containment.readEntry("lastScreen", 0);
                 const auto activity    = containment.readEntry("activityId", QString());
 
                 // Ignore the containment if the activity is not defined
@@ -130,9 +139,17 @@ namespace {
 
                 // If we have already found the same activity from another
                 // containment, we are using the new one only if
-                // the previous one was a color and not a proper wallpaper
+                // the previous one was a color and not a proper wallpaper,
+                // or if the screen ID is closer to zero
                 const bool processed = !ghostActivities.contains(activity) &&
-                                        newForActivity.contains(activity);
+                                        newForActivity.contains(activity) &&
+                                        (lastScreenForActivity[activity] <= lastScreen);
+
+                // qDebug() << "GREPME Searching containment " << containmentId
+                //          << "for the wallpaper of the " << activity << " activity - "
+                //          << "currently, we think that the wallpaper is " << processed << (processed ? newForActivity[activity] : QString())
+                //          << "last screen is" << lastScreen
+                //          ;
 
                 if (processed &&
                     newForActivity[activity][0] != '#') continue;
@@ -142,11 +159,22 @@ namespace {
 
                 const auto background = backgroundFromConfig(containment);
 
-                if (newForActivity[activity] != background) {
-                    changedActivities << activity;
-                    if (!background.isEmpty()) {
-                        newForActivity[activity] = background;
+                // qDebug() << "        GREPME Found wallpaper: " << background;
+
+                if (background.isEmpty()) continue;
+
+                // If we got this far and we already had a new wallpaper for
+                // this activity, it means we now have a better one
+                bool foundBetterWallpaper = changedActivities.contains(activity);
+
+                if (foundBetterWallpaper || newForActivity[activity] != background) {
+                    if (!foundBetterWallpaper) {
+                        changedActivities << activity;
                     }
+
+                    // qDebug() << "        GREPME Setting: " << activity << " = " << background << "," << lastScreen;
+                    newForActivity[activity] = background;
+                    lastScreenForActivity[activity] = lastScreen;
                 }
             }
 
@@ -169,15 +197,14 @@ namespace {
         }
 
         KConfigGroup plasmaConfigContainments() {
-            return plasmaConfig.group("Containments");
+            return plasmaConfig->group("Containments");
         }
 
         QHash<QString, QString> forActivity;
         QList<SortedActivitiesModel*> models;
 
         bool initialized;
-        KConfig plasmaConfig;
-
+        KSharedConfig::Ptr plasmaConfig;
     };
 
     static BackgroundCache &backgrounds()
@@ -187,11 +214,11 @@ namespace {
         static BackgroundCache cache;
         return cache;
     }
+
 }
 
 SortedActivitiesModel::SortedActivitiesModel(QVector<KActivities::Info::State> states, QObject *parent)
     : QSortFilterProxyModel(parent)
-    , m_sortByLastUsedTime(true)
     , m_activitiesModel(new KActivities::ActivitiesModel(states, this))
     , m_activities(new KActivities::Consumer(this))
 {
@@ -229,24 +256,6 @@ SortedActivitiesModel::~SortedActivitiesModel()
     backgrounds().unsubscribe(this);
 }
 
-bool SortedActivitiesModel::sortByLastUsedTime() const
-{
-    return m_sortByLastUsedTime;
-}
-
-void SortedActivitiesModel::setSortByLastUsedTime(bool sortByLastUsedTime)
-{
-    if (m_sortByLastUsedTime != sortByLastUsedTime) {
-        m_sortByLastUsedTime = sortByLastUsedTime;
-
-        if (m_sortByLastUsedTime) {
-            setSortRole(LastTimeUsed);
-        } else {
-            setSortRole(Qt::DisplayRole);
-        }
-    }
-}
-
 bool SortedActivitiesModel::inhibitUpdates() const
 {
     return m_inhibitUpdates;
@@ -268,7 +277,7 @@ uint SortedActivitiesModel::lastUsedTime(const QString &activity) const
         return ~(uint)0;
 
     } else {
-        KConfig config("kactivitymanagerd-switcher");
+        KConfig config("kactivitymanagerd-switcher", KConfig::SimpleConfig);
         KConfigGroup times(&config, "LastUsed");
 
         return times.readEntry(activity, (uint)0);
@@ -278,21 +287,16 @@ uint SortedActivitiesModel::lastUsedTime(const QString &activity) const
 bool SortedActivitiesModel::lessThan(const QModelIndex &sourceLeft,
                                      const QModelIndex &sourceRight) const
 {
-    if (m_sortByLastUsedTime) {
-        const auto activityLeft  = sourceModel()->data(sourceLeft, KActivities::ActivitiesModel::ActivityId);
-        const auto activityRight = sourceModel()->data(sourceRight, KActivities::ActivitiesModel::ActivityId);
+    const auto activityLeft =
+          sourceModel()->data(sourceLeft, KActivities::ActivitiesModel::ActivityId);
+    const auto activityRight =
+          sourceModel()->data(sourceRight, KActivities::ActivitiesModel::ActivityId);
 
-        const auto timeLeft  = lastUsedTime(activityLeft.toString());
-        const auto timeRight = lastUsedTime(activityRight.toString());
+    const auto timeLeft  = lastUsedTime(activityLeft.toString());
+    const auto timeRight = lastUsedTime(activityRight.toString());
 
-        return timeLeft < timeRight;
-
-    } else {
-        const auto titleLeft  = sourceModel()->data(sourceLeft, KActivities::ActivitiesModel::ActivityName);
-        const auto titleRight = sourceModel()->data(sourceRight, KActivities::ActivitiesModel::ActivityName);
-
-        return titleLeft < titleRight;
-    }
+    return (timeLeft < timeRight) ||
+           (timeLeft == timeRight && activityLeft < activityRight);
 }
 
 QHash<int, QByteArray> SortedActivitiesModel::roleNames() const
@@ -393,6 +397,11 @@ QString SortedActivitiesModel::relativeActivity(int relative) const
     if (!sourceModel()) return QString();
 
     const auto currentRowCount = sourceModel()->rowCount();
+
+    //x % 0 is undefined in c++
+    if (currentRowCount == 0) {
+        return QString();
+    }
 
     int currentActivityRow = 0;
 

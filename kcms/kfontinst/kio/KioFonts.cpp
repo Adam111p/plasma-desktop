@@ -23,14 +23,11 @@
 
 #include <QFile>
 #include <QCoreApplication>
-#include <KComponentData>
-#include <KDebug>
-#include <KMimeType>
-#include <KStandardDirs>
-#include <KTemporaryFile>
-#include <KTempDir>
+#include <QMimeDatabase>
+#include <QDebug>
+#include <QTemporaryFile>
+#include <QTemporaryDir>
 #include <KZip>
-#include <kde_file.h>
 #include <unistd.h>
 #include <pwd.h>
 #include <grp.h>
@@ -47,9 +44,10 @@
 #include "Family.h"
 #include "Style.h"
 #include "File.h"
+#include "debug.h"
 
 #define MAX_IPC_SIZE     (1024*32)
-#define KFI_DBUG         kDebug(7000) << '(' << time(NULL) << ')'
+#define KFI_DBUG         qCDebug(KCM_KFONTINST_KIO) << '(' << time(NULL) << ')'
 
 static const int constReconfigTimeout = 10;
 
@@ -65,7 +63,7 @@ Q_DECL_EXPORT int kdemain(int argc, char **argv)
     }
 
     QCoreApplication app(argc, argv);
-    KComponentData   componentData("kio_" KFI_KIO_FONTS_PROTOCOL);
+    QCoreApplication::setApplicationName("kio_" KFI_KIO_FONTS_PROTOCOL);
     KFI::CKioFonts   slave(argv[2], argv[3]);
 
     slave.dispatchLoop();
@@ -106,10 +104,10 @@ static CKioFonts::EFolder getFolder(const QStringList &list)
 
 static int getSize(const QString &file)
 {
-    KDE_struct_stat buff;
+    QT_STATBUF buff;
     QByteArray      f(QFile::encodeName(file));
 
-    if(-1!=KDE_lstat(f.constData(), &buff))
+    if(-1!=QT_LSTAT(f.constData(), &buff))
     {
         if (S_ISLNK(buff.st_mode))
         {
@@ -118,7 +116,7 @@ static int getSize(const QString &file)
             if(n!= -1)
                 buffer2[n]='\0';
 
-            if(-1==KDE_stat(f.constData(), &buff))
+            if(-1==QT_STAT(f.constData(), &buff))
                 return -1;
         }
         return buff.st_size;
@@ -232,12 +230,12 @@ void CKioFonts::put(const QUrl &url, int /*permissions*/, KIO::JobFlags /*flags*
     {
         if(!itsTempDir)
         {
-            itsTempDir=new KTempDir(KStandardDirs::locateLocal("tmp",
-                                    QString::fromLatin1("kio_fonts_")+QString::number(getpid())));
+            itsTempDir=new QTemporaryDir(QDir::tempPath() +
+                                         QString::fromLatin1("/kio_fonts_")+QString::number(getpid()));
             itsTempDir->setAutoRemove(true);
         }
 
-        QString tempFile(itsTempDir->name()+QChar('/')+url.fileName());
+        QString tempFile(itsTempDir->path()+QLatin1Char('/')+url.fileName());
         QFile   dest(tempFile);
 
         if (dest.open(QIODevice::WriteOnly))
@@ -359,7 +357,7 @@ void CKioFonts::get(const QUrl &url)
 
         QSet<QString>   files;
         QString         realPath;
-        KDE_struct_stat buff;
+        QT_STATBUF buff;
         bool            multiple=false;
 
         for(; it!=end; ++it)
@@ -381,7 +379,7 @@ void CKioFonts::get(const QUrl &url)
             realPath=(*files.begin());
         else   // Font is made up of multiple files - so create .zip of them all!
         {
-            KTemporaryFile tmpFile;
+            QTemporaryFile tmpFile;
 
             if(tmpFile.open())
             {
@@ -408,7 +406,7 @@ void CKioFonts::get(const QUrl &url)
         QByteArray realPathC(QFile::encodeName(realPath));
         KFI_DBUG << "real: " << realPathC;
 
-        if (-2==KDE_stat(realPathC.constData(), &buff))
+        if (-2==QT_STAT(realPathC.constData(), &buff))
             error(EACCES==errno ? KIO::ERR_ACCESS_DENIED : KIO::ERR_DOES_NOT_EXIST, url.toDisplayString());
         else if (S_ISDIR(buff.st_mode))
             error(KIO::ERR_IS_DIRECTORY, url.toDisplayString());
@@ -416,7 +414,7 @@ void CKioFonts::get(const QUrl &url)
             error(KIO::ERR_CANNOT_OPEN_FOR_READING, url.toDisplayString());
         else
         {
-            int fd = KDE_open(realPathC.constData(), O_RDONLY);
+            int fd = QT_OPEN(realPathC.constData(), O_RDONLY);
 
             if (fd < 0)
                 error(KIO::ERR_CANNOT_OPEN_FOR_READING, url.toDisplayString());
@@ -424,7 +422,10 @@ void CKioFonts::get(const QUrl &url)
             {
                 // Determine the mimetype of the file to be retrieved, and emit it.
                 // This is mandatory in all slaves (for KRun/BrowserRun to work).
-                emit mimeType(KMimeType::findByPath(realPathC, buff.st_mode)->name());
+                // This code can be optimized by using QFileInfo instead of buff above
+                // and passing it to mimeTypeForFile() instead of realPath.
+                QMimeDatabase db;
+                emit mimeType(db.mimeTypeForFile(realPath).name());
 
                 totalSize(buff.st_size);
 
@@ -691,9 +692,9 @@ bool CKioFonts::createUDSEntry(KIO::UDSEntry &entry, EFolder folder, const Famil
     for(; it!=end; ++it)
     {
         QByteArray      cPath(QFile::encodeName((*it).path()));
-        KDE_struct_stat buff;
+        QT_STATBUF buff;
 
-        if(-1!=KDE_lstat(cPath, &buff))
+        if(-1!=QT_LSTAT(cPath, &buff))
         {
             QString fileName(Misc::getFile((*it).path())),
                     mt;
@@ -718,10 +719,11 @@ bool CKioFonts::createUDSEntry(KIO::UDSEntry &entry, EFolder folder, const Famil
                 mt="application/x-font-bdf";
             else
             {
-                // File extension check failed, use kmimetype to read contents...
-                KMimeType::Ptr mime=KMimeType::findByPath((*it).path());
-                QStringList    patterns=mime->patterns();
-                mt=mime->name();
+                // File extension check failed, use QMimeDatabase to read contents...
+                QMimeDatabase db;
+                QMimeType mime = db.mimeTypeForFile((*it).path());
+                QStringList patterns = mime.globPatterns();
+                mt = mime.name();
                 if(patterns.size()>0)
                     extension=(*patterns.begin()).remove("*");
             }

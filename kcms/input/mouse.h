@@ -31,15 +31,7 @@
 #ifndef __MOUSECONFIG_H__
 #define __MOUSECONFIG_H__
 
-#include <QLabel>
-#include <QLCDNumber>
-#include <QPushButton>
-#include <QRadioButton>
 #include <QX11Info>
-#include <KDoubleNumInput>
-
-#include <kapplication.h>
-
 
 #include <config-workspace.h>
 
@@ -50,98 +42,88 @@
 #define LEFT_HANDED  1
 
 class QCheckBox;
+class QDoubleSpinBox;
 class QSlider;
+class QSpinBox;
 class QTabWidget;
 
 class KMouseDlg : public QWidget, public Ui::KMouseDlg
 {
 public:
-  KMouseDlg( QWidget *parent ) : QWidget( parent ) {
-    setupUi( this );
-  }
+    KMouseDlg( QWidget *parent ) : QWidget( parent ) {
+        setupUi( this );
+    }
 };
-
 
 class MouseSettings
 {
 public:
-  void save(KConfig *);
-  void load(KConfig *, Display *dpy = QX11Info::display());
-  void apply(bool force=false);
-public:
- int num_buttons;
- int middle_button;
- bool handedEnabled;
- bool m_handedNeedsApply;
- int handed;
- double accelRate;
- int thresholdMove;
- int doubleClickInterval;
- int dragStartTime;
- int dragStartDist;
- bool singleClick;
- int wheelScrollLines;
- bool reverseScrollPolarity;
+    void save(KConfig *);
+    void load(KConfig *, Display *dpy = QX11Info::display());
+    void apply(bool force=false);
 
+public:
+    int num_buttons;
+    int middle_button;
+    bool handedEnabled;
+    bool m_handedNeedsApply;
+    int handed;
+    double accelRate;
+    int thresholdMove;
+    int doubleClickInterval;
+    int dragStartTime;
+    int dragStartDist;
+    bool singleClick;
+    int wheelScrollLines;
+    bool reverseScrollPolarity;
 };
 
 class MouseConfig : public KCModule
 {
-  Q_OBJECT
+    Q_OBJECT
 public:
-  MouseConfig(QWidget *parent, const QVariantList &args);
-  ~MouseConfig();
+    MouseConfig(QWidget *parent, const QVariantList &args);
+    ~MouseConfig();
 
-  void save();
-  void load();
-  void defaults();
+    void save();
+    void load();
+    void defaults();
 
 private Q_SLOTS:
-
-  /** No descriptions */
-  void slotHandedChanged(int val);
-  void slotScrollPolarityChanged();
-  void checkAccess();
-  void slotThreshChanged(int value);
-  void slotDragStartDistChanged(int value);
-  void slotWheelScrollLinesChanged(int value);
+    void slotHandedChanged(int val);
+    void slotScrollPolarityChanged();
+    void checkAccess();
+    void slotThreshChanged(int value);
+    void slotDragStartDistChanged(int value);
+    void slotWheelScrollLinesChanged(int value);
 
 private:
+    double getAccel();
+    int getThreshold();
+    int getHandedness();
 
-  double getAccel();
-  int getThreshold();
-  int getHandedness();
+    void setAccel(double);
+    void setThreshold(int);
+    void setHandedness(int);
 
-  void setAccel(double);
-  void setThreshold(int);
-  void setHandedness(int);
+    QDoubleSpinBox *accel;
+    QSpinBox *thresh;
+    QSpinBox *doubleClickInterval;
+    QSpinBox *dragStartTime;
+    QSpinBox *dragStartDist;
+    QSpinBox *wheelScrollLines;
 
-  KDoubleNumInput *accel;
-  KIntNumInput *thresh;
-  KIntNumInput *doubleClickInterval;
-  KIntNumInput *dragStartTime;
-  KIntNumInput *dragStartDist;
-  KIntNumInput *wheelScrollLines;
+    QTabWidget *tabwidget;
+    QWidget *advancedTab;
+    KMouseDlg* generalTab;
+    MouseSettings *settings;
 
-//  QRadioButton *leftHanded, *rightHanded;
-//  QCheckBox *doubleClick;
-//  QCheckBox *cbAutoSelect;
-  QLabel *lDelay;
-//  QSlider *slAutoSelect;
-//  QCheckBox *cbVisualActivate;
-//  QCheckBox *cbCursor;
-//  QCheckBox *cbLargeCursor;
-
-  QTabWidget *tabwidget;
-  QWidget *advancedTab;
-  KMouseDlg* generalTab;
-  MouseSettings *settings;
-
- QCheckBox *mouseKeys;
-  KIntNumInput *mk_delay, *mk_interval, *mk_time_to_max, *mk_max_speed,
-    *mk_curve;
-
-
+    QCheckBox *mouseKeys;
+    QSpinBox *mk_delay;
+    QSpinBox *mk_interval;
+    QSpinBox *mk_time_to_max;
+    QSpinBox *mk_max_speed;
+    QSpinBox *mk_curve;
 };
 
 #endif

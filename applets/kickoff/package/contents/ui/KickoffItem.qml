@@ -35,9 +35,11 @@ Item {
     signal actionTriggered(string actionId, variant actionArgument)
     signal aboutToShowActionMenu(variant actionMenu)
 
+    readonly property int itemIndex: model.index
+
     property bool dropEnabled: false
     property bool appView: false
-    property bool modelChildren: model.hasChildren
+    property bool modelChildren: model.hasChildren || false
     property bool isCurrent: listItem.ListView.view.currentIndex === index;
     property string url: model.url || ""
     property bool showAppsByName: plasmoid.configuration.showAppsByName
@@ -55,7 +57,7 @@ Item {
         Tools.triggerAction(ListView.view.model, model.index, actionId, actionArgument);
 
         if (actionId.indexOf("_kicker_favorite_") === 0) {
-            switchToFavorites();
+            switchToInitial();
         }
     }
 
@@ -153,6 +155,7 @@ Item {
 
             onPositionChanged: {
                 if (pressX != -1 && model.url && dragHelper.isDrag(pressX, pressY, mouse.x, mouse.y)) {
+                    kickoff.dragSource = listItem;
                     dragHelper.startDrag(root, model.url, model.decoration);
                     pressed = false;
                     pressX = -1;
@@ -183,7 +186,7 @@ Item {
             animated: false
             usesPlasmaTheme: false
 
-            source: decoration
+            source: model.decoration
         }
         PlasmaComponents.Label {
             id: titleElement
