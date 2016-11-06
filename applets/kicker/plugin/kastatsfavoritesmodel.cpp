@@ -149,9 +149,34 @@ void KAStatsFavoritesModel::setFavorites(const QStringList& favorites)
 {
 }
 
+void KAStatsFavoritesModel::removeOldCachedEntries() const
+{
+    QStringList knownUrls;
+    for (int row = 0; row < rowCount(); ++row) {
+        qDebug() << "URL we got is" << sourceModel()->data(index(row, 0), ResultModel::ResourceRole);
+        knownUrls << sourceModel()->data(index(row, 0), ResultModel::ResourceRole).toString();
+    }
+
+    qDebug() << "Known urls are: " << knownUrls;
+
+    QMutableHashIterator<QString, AbstractEntry*> i(m_entries);
+    while (i.hasNext()) {
+        i.next();
+
+        qDebug() << "Checking: " << i.key();
+
+        if (!knownUrls.contains(i.key())) {
+            qDebug() << "Removing: " << i.key();
+            delete i.value();
+            i.remove();
+        }
+    }
+}
+
 bool KAStatsFavoritesModel::isFavorite(const QString &id) const
 {
-    qDebug() << "isFavorite" << id;
+    qDebug() << "isFavorite" << id << validateUrl(id);
+    removeOldCachedEntries();
     return m_entries.contains(validateUrl(id));
 }
 
@@ -160,10 +185,14 @@ void KAStatsFavoritesModel::addFavorite(const QString &id, int index)
     // TODO: Inspect where this is used
     Q_UNUSED(index)
 
+    qDebug() << "Adding favourite:" << id;
+
     if (id.isEmpty()) return;
 
     QString scheme;
     const QString url = validateUrl(id, &scheme);
+
+    qDebug() << "Adding favourite - fixed URL is:" << url << " scheme:" << scheme;
 
     // This is a file, we want to check that it exists
     if (scheme.isEmpty() && !QFileInfo::exists(id)) return;
@@ -177,6 +206,8 @@ void KAStatsFavoritesModel::removeFavorite(const QString &id)
 {
     QString scheme;
     const QString url = validateUrl(id, &scheme);
+
+    qDebug() << "Removing favourite:" << url << id;
 
     m_sourceModel->unlinkFromActivity(
         QUrl(url), Activity::current(),
@@ -268,7 +299,8 @@ AbstractEntry *KAStatsFavoritesModel::favoriteFromId(const QString &id)
 
 QString KAStatsFavoritesModel::validateUrl(const QString &url, QString * scheme) const
 {
-    const QUrl qurl(url);
+    QString result = url;
+    QUrl qurl(url);
 
     QString s; // needed only when scheme is null
 
@@ -278,12 +310,18 @@ QString KAStatsFavoritesModel::validateUrl(const QString &url, QString * scheme)
 
     *scheme = qurl.scheme();
 
-    if (scheme->isEmpty() && url.contains(".desktop")) {
+    if (*scheme == "file") {
+        *scheme = "";
+        result = qurl.toLocalFile();
+        qDebug() << "URL is a local file: " << qurl << result;
+    }
+
+    if (scheme->isEmpty() && result.contains(".desktop")) {
         *scheme = "applications";
-        return "applications://" + url;
+        return "applications://" + result.toLower();
 
     } else {
-        return url;
+        return result;
     }
 }
 

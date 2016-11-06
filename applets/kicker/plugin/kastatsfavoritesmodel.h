@@ -93,6 +93,7 @@ class KAStatsFavoritesModel : public ForwardingModel
 
         // QList<AbstractEntry *> m_entryList;
         mutable QHash<QString, AbstractEntry *> m_entries;
+        void removeOldCachedEntries() const;
         int m_maxFavorites;
 
         int m_dropPlaceholderIndex;
