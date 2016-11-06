@@ -25,6 +25,7 @@
 #include "actionlist.h"
 
 #include <QDebug>
+#include <QFileInfo>
 
 #include <KLocalizedString>
 #include <KConfigGroup>
@@ -63,18 +64,21 @@ QVariant KAStatsFavoritesModel::data(const QModelIndex& index, int role) const
         return QVariant();
     }
 
+    qDebug() << "We want:" << index.row();
+
     const QString url =
-        ForwardingModel::data(index, ResultModel::ResourceRole).toString();
+        sourceModel()->data(index, ResultModel::ResourceRole).toString();
 
     qDebug() << "URL" << url;
 
     // const casts are bad, but we can not achieve this
-    // with the standard 'mutable' members for lazy evaluation
+    // with the standard 'mutable' members for lazy evaluation,
+    // at least, not with the current design of the library
     const AbstractEntry *entry =
         const_cast<KAStatsFavoritesModel*>(this)->favoriteFromId(url);
 
     if (!entry) {
-        return "NULL!";
+        return QVariant("NULL for '" + url + "'!");
     }
 
     if (role == Qt::DisplayRole) {
@@ -156,8 +160,13 @@ void KAStatsFavoritesModel::addFavorite(const QString &id, int index)
     // TODO: Inspect where this is used
     Q_UNUSED(index)
 
+    if (id.isEmpty()) return;
+
     QString scheme;
     const QString url = validateUrl(id, &scheme);
+
+    // This is a file, we want to check that it exists
+    if (scheme.isEmpty() && !QFileInfo::exists(id)) return;
 
     m_sourceModel->linkToActivity(
         QUrl(url), Activity::current(),
@@ -235,6 +244,8 @@ AbstractEntry *KAStatsFavoritesModel::favoriteFromId(const QString &id)
         const QUrl url(id);
         const QString &s = url.scheme();
 
+        qDebug() << "URL: " << id << " scheme is " << s << " valid " << url.isValid();
+
         AbstractEntry *entry = nullptr;
 
         if (s == QStringLiteral("applications")
@@ -243,8 +254,10 @@ AbstractEntry *KAStatsFavoritesModel::favoriteFromId(const QString &id)
             entry = new AppEntry(this, id);
         } else if (s == QStringLiteral("ktp")) {
             entry = new ContactEntry(this, id);
-        } else if (url.isValid() && !url.scheme().isEmpty()) {
-            entry = new FileEntry(this, url);
+        } else if (url.isValid()) {
+            auto _url = s.isEmpty() ? QUrl::fromLocalFile(id)
+                                    : url;
+            entry = new FileEntry(this, _url);
         }
 
         m_entries[id] = entry;
