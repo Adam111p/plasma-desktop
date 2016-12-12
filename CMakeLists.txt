@@ -1,5 +1,7 @@
 project(plasma-desktop)
+
 set(PROJECT_VERSION "5.8.90")
+
 set(PROJECT_VERSION_MAJOR 5)
 
 cmake_minimum_required(VERSION 2.8.12 FATAL_ERROR)
@@ -67,14 +69,10 @@ set_package_properties(PackageKitQt5 PROPERTIES DESCRIPTION "Software Manager in
                        PURPOSE "Provides package management integration to the application launcher."
                       )
 
-# Baloo is currently part of the KF5 namespace, but it is not
-# a proper framework. Hence the strange versioning.
-# This will be fixed with Plasma 5.2, as Baloo should have
-# become a framework by then
-find_package(KF5Baloo "5.1.90")
+find_package(KF5Baloo)
 set_package_properties(KF5Baloo PROPERTIES DESCRIPTION "File Searching"
-                       TYPE REQUIRED
-                       PURPOSE "Needed to build to File Search KCM"
+                       TYPE RECOMMENDED
+                       PURPOSE "Needed to build the File Search KCM"
                       )
 
 find_package(Fontconfig)

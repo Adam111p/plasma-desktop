@@ -44,6 +44,8 @@ MouseArea {
     property int itemIndex: index
     property bool inPopup: false
     property bool isWindow: model.IsWindow === true
+    property int childCount: model.ChildCount != undefined ? model.ChildCount : 0
+    property int previousChildCount: 0
     property alias textWidth: label.implicitWidth
     property bool pressed: false
     property int pressX: -1
@@ -61,6 +63,14 @@ MouseArea {
         if (isWindow) {
             taskInitComponent.createObject(task);
         }
+    }
+
+    onChildCountChanged: {
+        if (childCount > previousChildCount) {
+            tasksModel.requestPublishDelegateGeometry(modelIndex(), backend.globalRect(task), task);
+        }
+
+        previousChildCount = childCount;
     }
 
     onItemIndexChanged: {
@@ -340,7 +350,11 @@ MouseArea {
         }
 
         Loader {
-            anchors.fill: icon
+            // QTBUG anchors.fill in conjunction with the Loader doesn't reliably work on creation:
+            // have a window with a badge, move it from one screen to another, the new task item on the
+            // other screen will now have a glitched out badge mask.
+            width: parent.width
+            height: parent.height
             asynchronous: true
             source: "TaskBadgeOverlay.qml"
             active: plasmoid.configuration.smartLaunchersEnabled && height >= units.iconSizes.small
