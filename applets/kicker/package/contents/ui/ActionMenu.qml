@@ -90,6 +90,8 @@ Item {
             separator: actionItem.type == "separator"
             section: actionItem.type == "title"
             icon: actionItem.icon ? actionItem.icon : null
+            checkable: actionItem.checkable ? actionItem.checkable : false
+            checked: actionItem.checked ? actionItem.checked : false
 
             onClicked: {
                 actionClicked(actionItem.actionId, actionItem.actionArgument);

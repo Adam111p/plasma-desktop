@@ -30,8 +30,10 @@
 #include <KLocalizedString>
 #include <KConfigGroup>
 
+#include <KActivities/Consumer>
 #include <KActivities/Stats/Terms>
 #include <KActivities/Stats/Query>
+#include <KActivities/Stats/ResultSet>
 #include <KActivities/Stats/ResultModel>
 
 namespace KAStats = KActivities::Stats;
@@ -44,6 +46,7 @@ KAStatsFavoritesModel::KAStatsFavoritesModel(QObject *parent) : ForwardingModel(
 , m_maxFavorites(-1)
 , m_dropPlaceholderIndex(-1)
 , m_sourceModel(nullptr)
+, m_activities(new KActivities::Consumer(this))
 , m_config("TESTTEST")
 {
     refresh();
@@ -178,6 +181,26 @@ bool KAStatsFavoritesModel::isFavorite(const QString &id) const
 
 void KAStatsFavoritesModel::addFavorite(const QString &id, int index)
 {
+    addFavoriteTo(id, Activity::current(), index);
+}
+
+void KAStatsFavoritesModel::removeFavorite(const QString &id)
+{
+    removeFavoriteFrom(id, Activity::current());
+}
+
+void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const QString &activityId, int index)
+{
+    addFavoriteTo(id, Activity(activityId), index);
+}
+
+void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const QString &activityId)
+{
+    removeFavoriteFrom(id, Activity(activityId));
+}
+
+void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &activity, int index)
+{
     // TODO: Ask Eike where this is used, and how to test it
     Q_UNUSED(index)
 
@@ -190,17 +213,17 @@ void KAStatsFavoritesModel::addFavorite(const QString &id, int index)
     if (scheme.isEmpty() && !QFileInfo::exists(id)) return;
 
     m_sourceModel->linkToActivity(
-        QUrl(url), Activity::current(),
+        QUrl(url), activity,
         Agent(agentForScheme(scheme)));
 }
 
-void KAStatsFavoritesModel::removeFavorite(const QString &id)
+void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const Activity &activity)
 {
     QString scheme;
     const QString url = validateUrl(id, &scheme);
 
     m_sourceModel->unlinkFromActivity(
-        QUrl(url), Activity::current(),
+        QUrl(url), activity,
         Agent(agentForScheme(scheme)));
 }
 
@@ -325,5 +348,40 @@ QString KAStatsFavoritesModel::agentForScheme(const QString &scheme) const
     }
 
     return QString();
+}
+
+QObject *KAStatsFavoritesModel::activities() const
+{
+    return m_activities;
+}
+
+QString KAStatsFavoritesModel::activityNameForId(const QString &activityId) const
+{
+    // It is safe to use a short-lived object here,
+    // we are always synced with KAMD in plasma
+    KActivities::Info info(activityId);
+    return info.name();
+}
+
+QStringList KAStatsFavoritesModel::linkedActivitiesFor(const QString &id) const
+{
+    auto url = validateUrl(id, nullptr);
+
+    auto query = LinkedResources
+                    | Agent {
+                        "org.kde.plasma.favorites.applications",
+                        "org.kde.plasma.favorites.contacts"
+                      }
+                    | Type::any()
+                    | Activity::any()
+                    | Url(url);
+
+    ResultSet results(query);
+
+    for (const auto &result: results) {
+        return result.linkedActivities();
+    }
+
+    return {};
 }
 

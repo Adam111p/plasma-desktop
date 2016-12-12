@@ -22,42 +22,93 @@ function fillActionMenu(actionMenu, actionList, favoriteModel, favoriteId) {
     // Accessing actionList can be a costly operation, so we don't
     // access it until we need the menu.
 
-    var action = createFavoriteAction(favoriteModel, favoriteId);
+    var actions = createFavoriteActions(favoriteModel, favoriteId);
 
-    if (action) {
+    if (actions) {
         if (actionList && actionList.length > 0) {
             var separator = { "type": "separator" };
-            actionList.unshift(action, separator);
+            actionList.unshift(separator);
+            // actionList = actions.concat(actionList); // this crashes Qt O.o
+            actionList.unshift.apply(actionList, actions);
         } else {
-            actionList = [action];
+            actionList = actions;
         }
     }
 
     actionMenu.actionList = actionList;
 }
 
-function createFavoriteAction(favoriteModel, favoriteId) {
+function createFavoriteActions(favoriteModel, favoriteId) {
     if (favoriteModel === null || !favoriteModel.enabled || favoriteId == null) {
         return null;
     }
 
-    var action = {};
+    var activities = favoriteModel.activities.runningActivities;
 
-    if (favoriteModel.isFavorite(favoriteId)) {
-        action.text = i18n("Remove from Favorites");
-        action.icon = "list-remove";
-        action.actionId = "_kicker_favorite_remove";
-    } else if (favoriteModel.maxFavorites == -1 || favoriteModel.count < favoriteModel.maxFavorites) {
-        action.text = i18n("Add to Favorites");
-        action.icon = "bookmark-new";
-        action.actionId = "_kicker_favorite_add";
+    if (activities.length <= 1) {
+        var action = {};
+
+        if (favoriteModel.isFavorite(favoriteId)) {
+            action.text = i18n("Remove from Favorites");
+            action.icon = "list-remove";
+            action.actionId = "_kicker_favorite_remove";
+        } else if (favoriteModel.maxFavorites == -1 || favoriteModel.count < favoriteModel.maxFavorites) {
+            action.text = i18n("Add to Favorites");
+            action.icon = "bookmark-new";
+            action.actionId = "_kicker_favorite_add";
+        } else {
+            return null;
+        }
+
+        action.actionArgument = { favoriteModel: favoriteModel, favoriteId: favoriteId };
+
+        return [action];
+
     } else {
-        return null;
+        var actions = [];
+
+        var action = {};
+
+        // if (favoriteModel.isFavorite(favoriteId)) {
+        //     action.text = i18n("Remove from Favorites");
+        //     action.icon = "list-remove";
+        //     action.actionId = "_kicker_favorite_remove";
+        // } else if (favoriteModel.maxFavorites == -1 || favoriteModel.count < favoriteModel.maxFavorites) {
+        //     action.text = i18n("Add to Favorites");
+        //     action.icon = "bookmark-new";
+        //     action.actionId = "_kicker_favorite_add";
+        // }
+        //
+        // actions = [action];
+
+        action.actionArgument = { favoriteModel: favoriteModel, favoriteId: favoriteId };
+
+        var linkedActivities = favoriteModel.linkedActivitiesFor(favoriteId);
+
+        activities.forEach(function(activityId) {
+            var action = {};
+            action.text = favoriteModel.activityNameForId(activityId);
+            action.checkable = true;
+
+            if (linkedActivities.indexOf(activityId) === -1) {
+                action.actionId = "_kicker_favorite_add_to_activity";
+                action.checked = false;
+            } else {
+                action.actionId = "_kicker_favorite_remove_from_activity";
+                action.checked = true;
+            }
+
+            action.actionArgument = {
+                favoriteModel: favoriteModel,
+                favoriteId: favoriteId,
+                favoriteActivity: activityId
+            };
+
+            actions.push(action);
+        });
+
+        return actions;
     }
-
-    action.actionArgument = { favoriteModel: favoriteModel, favoriteId: favoriteId };
-
-    return action;
 }
 
 function triggerAction(model, index, actionId, actionArgument) {
@@ -88,9 +139,18 @@ function handleFavoriteAction(actionId, actionArgument) {
     if (favoriteModel === null || favoriteId == null) {
         return null;
     }
+
     if (actionId == "_kicker_favorite_remove") {
         favoriteModel.removeFavorite(favoriteId);
+
     } else if (actionId == "_kicker_favorite_add") {
         favoriteModel.addFavorite(favoriteId);
+
+    } else if (actionId == "_kicker_favorite_remove_from_activity") {
+        favoriteModel.removeFavoriteFrom(favoriteId, actionArgument.favoriteActivity);
+
+    } else if (actionId == "_kicker_favorite_add_to_activity") {
+        favoriteModel.addFavoriteTo(favoriteId, actionArgument.favoriteActivity);
+
     }
 }
