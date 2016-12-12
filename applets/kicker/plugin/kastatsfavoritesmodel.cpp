@@ -163,10 +163,7 @@ void KAStatsFavoritesModel::removeOldCachedEntries() const
     while (i.hasNext()) {
         i.next();
 
-        qDebug() << "Checking: " << i.key();
-
         if (!knownUrls.contains(i.key())) {
-            qDebug() << "Removing: " << i.key();
             delete i.value();
             i.remove();
         }
@@ -175,24 +172,19 @@ void KAStatsFavoritesModel::removeOldCachedEntries() const
 
 bool KAStatsFavoritesModel::isFavorite(const QString &id) const
 {
-    qDebug() << "isFavorite" << id << validateUrl(id);
     removeOldCachedEntries();
     return m_entries.contains(validateUrl(id));
 }
 
 void KAStatsFavoritesModel::addFavorite(const QString &id, int index)
 {
-    // TODO: Inspect where this is used
+    // TODO: Ask Eike where this is used, and how to test it
     Q_UNUSED(index)
-
-    qDebug() << "Adding favourite:" << id;
 
     if (id.isEmpty()) return;
 
     QString scheme;
     const QString url = validateUrl(id, &scheme);
-
-    qDebug() << "Adding favourite - fixed URL is:" << url << " scheme:" << scheme;
 
     // This is a file, we want to check that it exists
     if (scheme.isEmpty() && !QFileInfo::exists(id)) return;
@@ -207,8 +199,6 @@ void KAStatsFavoritesModel::removeFavorite(const QString &id)
     QString scheme;
     const QString url = validateUrl(id, &scheme);
 
-    qDebug() << "Removing favourite:" << url << id;
-
     m_sourceModel->unlinkFromActivity(
         QUrl(url), Activity::current(),
         Agent(agentForScheme(scheme)));
@@ -218,8 +208,6 @@ void KAStatsFavoritesModel::moveRow(int from, int to)
 {
     const QString url =
         ForwardingModel::data(index(from, 0), ResultModel::ResourceRole).toString();
-
-    qDebug() << "Moving " << url << "(" << from << ") to" << to;
 
     m_sourceModel->setResultPosition(validateUrl(url), to);
 }
