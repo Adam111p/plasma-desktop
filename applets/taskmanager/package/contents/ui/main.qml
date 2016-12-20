@@ -169,7 +169,7 @@ Item {
     TaskManagerApplet.Backend {
         id: backend
 
-        taskManagerItem: tasks
+        taskManagerItem: groupDialog.visible ? null : tasks
         toolTipItem: toolTipDelegate
         highlightWindows: plasmoid.configuration.highlightWindows
 
@@ -385,6 +385,18 @@ Item {
     function addLauncher(url) {
         if (plasmoid.immutability !== PlasmaCore.Types.SystemImmutable) {
             tasksModel.requestAddLauncher(url);
+        }
+    }
+
+    // This is called by plasmashell in response to a Meta+number shortcut.
+    function activateTaskAtIndex(index) {
+        if (typeof index !== "number") {
+            return;
+        }
+
+        var task = taskRepeater.itemAt(index);
+        if (task) {
+            TaskTools.activateTask(task.modelIndex(), task.m, null, task);
         }
     }
 
