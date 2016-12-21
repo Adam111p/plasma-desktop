@@ -100,7 +100,7 @@ class KAStatsFavoritesModel : public ForwardingModel
         void dropPlaceholderIndexChanged();
 
     private:
-        AbstractEntry *favoriteFromId(const QString &id);
+        AbstractEntry *favoriteFromId(const QString &id) const;
 
         QString validateUrl(const QString &url, QString * scheme = nullptr) const;
         QString agentForScheme(const QString &scheme) const;
@@ -118,6 +118,7 @@ class KAStatsFavoritesModel : public ForwardingModel
         int m_dropPlaceholderIndex;
         KActivities::Stats::ResultModel *m_sourceModel;
         KActivities::Consumer *m_activities;
+        mutable QStringList m_invalidUrls;
 
         KConfig m_config;
 };

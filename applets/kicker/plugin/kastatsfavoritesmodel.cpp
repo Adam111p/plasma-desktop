@@ -69,10 +69,13 @@ QVariant KAStatsFavoritesModel::data(const QModelIndex& index, int role) const
 
     qDebug() << "We want:" << index.row();
 
-    const QString url =
+    const QString id =
         sourceModel()->data(index, ResultModel::ResourceRole).toString();
 
-    qDebug() << "URL" << url;
+    qDebug() << "URL" << id;
+
+    QString scheme;
+    const QString url = validateUrl(id, &scheme);
 
     // const casts are bad, but we can not achieve this
     // with the standard 'mutable' members for lazy evaluation,
@@ -80,8 +83,17 @@ QVariant KAStatsFavoritesModel::data(const QModelIndex& index, int role) const
     const AbstractEntry *entry =
         const_cast<KAStatsFavoritesModel*>(this)->favoriteFromId(url);
 
-    if (!entry) {
-        return QVariant("NULL for '" + url + "'!");
+    if (!entry || !entry->isValid()) {
+        // If the result is not valid, we need to unlink it -- to
+        // remove it from the model
+        if (!m_invalidUrls.contains(url)) {
+            m_sourceModel->unlinkFromActivity(
+                    QUrl(url), Activity::any(),
+                    Agent(agentForScheme(scheme))
+                );
+            m_invalidUrls << url;
+        }
+        return QVariant("NULL for '" + url + "'! - " + agentForScheme(scheme));
     }
 
     if (role == Qt::DisplayRole) {
@@ -223,8 +235,9 @@ void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const Activity
     const QString url = validateUrl(id, &scheme);
 
     m_sourceModel->unlinkFromActivity(
-        QUrl(url), activity,
-        Agent(agentForScheme(scheme)));
+            QUrl(url), activity,
+            Agent(agentForScheme(scheme))
+        );
 }
 
 void KAStatsFavoritesModel::moveRow(int from, int to)
@@ -280,8 +293,10 @@ void KAStatsFavoritesModel::refresh()
     delete oldModel;
 }
 
-AbstractEntry *KAStatsFavoritesModel::favoriteFromId(const QString &id)
+AbstractEntry *KAStatsFavoritesModel::favoriteFromId(const QString &id) const
 {
+    auto _this = const_cast<KAStatsFavoritesModel*>(this);
+
     if (!m_entries.contains(id)) {
         const QUrl url(id);
         const QString &s = url.scheme();
@@ -293,13 +308,13 @@ AbstractEntry *KAStatsFavoritesModel::favoriteFromId(const QString &id)
         if (s == QStringLiteral("applications")
                 || s == QStringLiteral("preferred")
                 || (s.isEmpty() && id.contains(QStringLiteral(".desktop")))) {
-            entry = new AppEntry(this, id);
+            entry = new AppEntry(_this, id);
         } else if (s == QStringLiteral("ktp")) {
-            entry = new ContactEntry(this, id);
+            entry = new ContactEntry(_this, id);
         } else if (url.isValid()) {
             auto _url = s.isEmpty() ? QUrl::fromLocalFile(id)
                                     : url;
-            entry = new FileEntry(this, _url);
+            entry = new FileEntry(_this, _url);
         }
 
         m_entries[id] = entry;
@@ -319,7 +334,20 @@ QString KAStatsFavoritesModel::validateUrl(const QString &url, QString * scheme)
         scheme = &s;
     }
 
+    qDebug() << "Validating: " << qurl << "(scheme is " << (*scheme) << ")";
+
     *scheme = qurl.scheme();
+
+    // If the scheme is not specified, it is probably
+    // a file in .local/share/applications -- we are
+    // going to rely on the URL returned by AppEntry
+    if (scheme->isEmpty() && url.contains(QStringLiteral(".desktop"))) {
+        const auto entry = favoriteFromId(url);
+        if (entry && entry->isValid()) {
+            qurl = entry->url();
+            *scheme = qurl.scheme();
+        }
+    }
 
     if (*scheme == "file") {
         *scheme = "";
