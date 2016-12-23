@@ -102,7 +102,7 @@ class KAStatsFavoritesModel : public ForwardingModel
     private:
         AbstractEntry *favoriteFromId(const QString &id) const;
 
-        QString validateUrl(const QString &url, QString * scheme = nullptr) const;
+        QUrl urlForId(const QString &id) const;
         QString agentForScheme(const QString &scheme) const;
 
         void addFavoriteTo(const QString &id, const KActivities::Stats::Terms::Activity &activityId, int index = -1);

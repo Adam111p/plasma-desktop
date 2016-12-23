@@ -67,52 +67,44 @@ QVariant KAStatsFavoritesModel::data(const QModelIndex& index, int role) const
         return QVariant();
     }
 
-    qDebug() << "We want:" << index.row();
-
     const QString id =
         sourceModel()->data(index, ResultModel::ResourceRole).toString();
 
     qDebug() << "URL" << id;
 
-    QString scheme;
-    const QString url = validateUrl(id, &scheme);
-
     // const casts are bad, but we can not achieve this
     // with the standard 'mutable' members for lazy evaluation,
     // at least, not with the current design of the library
-    const AbstractEntry *entry =
-        const_cast<KAStatsFavoritesModel*>(this)->favoriteFromId(url);
+    const auto *entry =
+        const_cast<KAStatsFavoritesModel*>(this)->favoriteFromId(id);
 
     if (!entry || !entry->isValid()) {
         // If the result is not valid, we need to unlink it -- to
         // remove it from the model
+        const auto url = urlForId(id);
+
         if (!m_invalidUrls.contains(url)) {
             m_sourceModel->unlinkFromActivity(
-                    QUrl(url), Activity::any(),
-                    Agent(agentForScheme(scheme))
+                    url, Activity::any(),
+                    Agent(agentForScheme(url.scheme()))
                 );
             m_invalidUrls << url;
         }
-        return QVariant("NULL for '" + url + "'! - " + agentForScheme(scheme));
+
+        // return QVariant("NULL for '" + url + "'! - " + agentForScheme(scheme));
+
+        return role == Qt::DecorationRole ? "unknown"
+                                          : QVariant();
     }
 
-    if (role == Qt::DisplayRole) {
-        return entry->name();
-    } else if (role == Qt::DecorationRole) {
-        return entry->icon();
-    } else if (role == Kicker::DescriptionRole) {
-        return entry->description();
-    } else if (role == Kicker::FavoriteIdRole) {
-        return entry->id();
-    } else if (role == Kicker::UrlRole) {
-        return entry->url();
-    } else if (role == Kicker::HasActionListRole) {
-        return entry->hasActions();
-    } else if (role == Kicker::ActionListRole) {
-        return entry->actions();
-    }
-
-    return QVariant();
+    return role == Qt::DisplayRole ? entry->name()
+         : role == Qt::DecorationRole ? entry->icon()
+         : role == Kicker::DescriptionRole ? entry->description()
+         : role == Kicker::FavoriteIdRole ? entry->id()
+         : role == Kicker::UrlRole ? entry->url()
+         : role == Kicker::HasActionListRole ? entry->hasActions()
+         : role == Kicker::ActionListRole ? entry->actions()
+         : QVariant();
 }
 
 // int KAStatsFavoritesModel::rowCount(const QModelIndex& parent) const
@@ -188,7 +180,7 @@ void KAStatsFavoritesModel::removeOldCachedEntries() const
 bool KAStatsFavoritesModel::isFavorite(const QString &id) const
 {
     removeOldCachedEntries();
-    return m_entries.contains(validateUrl(id));
+    return m_entries.contains(urlForId(id));
 }
 
 void KAStatsFavoritesModel::addFavorite(const QString &id, int index)
@@ -218,34 +210,33 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
 
     if (id.isEmpty()) return;
 
-    QString scheme;
-    const QString url = validateUrl(id, &scheme);
+    const auto url = urlForId(id);
 
     // This is a file, we want to check that it exists
-    if (scheme.isEmpty() && !QFileInfo::exists(id)) return;
+    if (url.isLocalFile() && !QFileInfo::exists(url.toLocalFile())) return;
 
     m_sourceModel->linkToActivity(
-        QUrl(url), activity,
-        Agent(agentForScheme(scheme)));
+            url, activity,
+            Agent(agentForScheme(url.scheme()))
+        );
 }
 
 void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const Activity &activity)
 {
-    QString scheme;
-    const QString url = validateUrl(id, &scheme);
+    const auto url = urlForId(id);
 
     m_sourceModel->unlinkFromActivity(
-            QUrl(url), activity,
-            Agent(agentForScheme(scheme))
+            url, activity,
+            Agent(agentForScheme(url.scheme()))
         );
 }
 
 void KAStatsFavoritesModel::moveRow(int from, int to)
 {
-    const QString url =
+    const QString id =
         ForwardingModel::data(index(from, 0), ResultModel::ResourceRole).toString();
 
-    m_sourceModel->setResultPosition(validateUrl(url), to);
+    m_sourceModel->setResultPosition(urlForId(id).toString(), to);
 }
 
 int KAStatsFavoritesModel::dropPlaceholderIndex() const
@@ -299,21 +290,21 @@ AbstractEntry *KAStatsFavoritesModel::favoriteFromId(const QString &id) const
 
     if (!m_entries.contains(id)) {
         const QUrl url(id);
-        const QString &s = url.scheme();
+        const QString &scheme = url.scheme();
 
-        qDebug() << "URL: " << id << " scheme is " << s << " valid " << url.isValid();
+        qDebug() << "URL: " << id << " scheme is " << scheme << " valid " << url.isValid();
 
         AbstractEntry *entry = nullptr;
 
-        if (s == QStringLiteral("applications")
-                || s == QStringLiteral("preferred")
-                || (s.isEmpty() && id.contains(QStringLiteral(".desktop")))) {
+        if (scheme == QStringLiteral("applications")
+                || scheme == QStringLiteral("preferred")
+                || (scheme.isEmpty() && id.contains(QStringLiteral(".desktop")))) {
             entry = new AppEntry(_this, id);
-        } else if (s == QStringLiteral("ktp")) {
+        } else if (scheme == QStringLiteral("ktp")) {
             entry = new ContactEntry(_this, id);
         } else if (url.isValid()) {
-            auto _url = s.isEmpty() ? QUrl::fromLocalFile(id)
-                                    : url;
+            auto _url = scheme.isEmpty() ? QUrl::fromLocalFile(id)
+                                         : url;
             entry = new FileEntry(_this, _url);
         }
 
@@ -323,59 +314,19 @@ AbstractEntry *KAStatsFavoritesModel::favoriteFromId(const QString &id) const
     return m_entries[id];
 }
 
-QString KAStatsFavoritesModel::validateUrl(const QString &url, QString * scheme) const
+QUrl KAStatsFavoritesModel::urlForId(const QString &id) const
 {
-    QString result = url;
-    QUrl qurl(url);
+    const auto entry = favoriteFromId(id);
 
-    QString s; // needed only when scheme is null
-
-    if (!scheme) {
-        scheme = &s;
-    }
-
-    qDebug() << "Validating: " << qurl << "(scheme is " << (*scheme) << ")";
-
-    *scheme = qurl.scheme();
-
-    // If the scheme is not specified, it is probably
-    // a file in .local/share/applications -- we are
-    // going to rely on the URL returned by AppEntry
-    if (scheme->isEmpty() && url.contains(QStringLiteral(".desktop"))) {
-        const auto entry = favoriteFromId(url);
-        if (entry && entry->isValid()) {
-            qurl = entry->url();
-            *scheme = qurl.scheme();
-        }
-    }
-
-    if (*scheme == "file") {
-        *scheme = "";
-        result = qurl.toLocalFile();
-        qDebug() << "URL is a local file: " << qurl << result;
-    }
-
-    if (scheme->isEmpty() && result.contains(".desktop")) {
-        *scheme = "applications";
-        return "applications://" + result.toLower();
-
-    } else {
-        return result;
-    }
+    return entry && entry->isValid() ? entry->url()
+                                     : QUrl();
 }
 
 QString KAStatsFavoritesModel::agentForScheme(const QString &scheme) const
 {
-    if (scheme == QStringLiteral("applications")
-            || scheme == QStringLiteral("preferred")) {
-        return "org.kde.plasma.favorites.applications";
-
-    } else if (scheme == QStringLiteral("ktp")) {
-        return "org.kde.plasma.favorites.contacts";
-
-    }
-
-    return QString();
+    return scheme ==
+        QStringLiteral("ktp") ? "org.kde.plasma.favorites.contacts"
+                              : "org.kde.plasma.favorites.applications";
 }
 
 QObject *KAStatsFavoritesModel::activities() const
@@ -393,7 +344,7 @@ QString KAStatsFavoritesModel::activityNameForId(const QString &activityId) cons
 
 QStringList KAStatsFavoritesModel::linkedActivitiesFor(const QString &id) const
 {
-    auto url = validateUrl(id, nullptr);
+    auto url = urlForId(id);
 
     auto query = LinkedResources
                     | Agent {
@@ -402,7 +353,7 @@ QStringList KAStatsFavoritesModel::linkedActivitiesFor(const QString &id) const
                       }
                     | Type::any()
                     | Activity::any()
-                    | Url(url);
+                    | Url(url.toString());
 
     ResultSet results(query);
 
