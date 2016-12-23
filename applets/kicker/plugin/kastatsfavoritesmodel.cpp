@@ -97,6 +97,8 @@ QVariant KAStatsFavoritesModel::data(const QModelIndex& index, int role) const
                                           : QVariant();
     }
 
+    // qDebug() << "Entry: " << entry->name() << entry->icon();
+
     return role == Qt::DisplayRole ? entry->name()
          : role == Qt::DecorationRole ? entry->icon()
          : role == Kicker::DescriptionRole ? entry->description()
@@ -117,11 +119,12 @@ bool KAStatsFavoritesModel::trigger(int row, const QString &actionId, const QVar
         return false;
     }
 
-    const QString url =
+    const QString id =
         ForwardingModel::data(index(row, 0), ResultModel::ResourceRole).toString();
 
-    return m_entries.contains(url) ? m_entries[url]->run(actionId, argument)
-                                   : false;
+    return m_entries.contains(id)
+                ? m_entries[id]->run(actionId, argument)
+                : false;
 }
 
 bool KAStatsFavoritesModel::enabled() const
@@ -158,10 +161,11 @@ void KAStatsFavoritesModel::setFavorites(const QStringList& favorites)
 
 void KAStatsFavoritesModel::removeOldCachedEntries() const
 {
-    QStringList knownUrls;
+    QList<QUrl> knownUrls;
     for (int row = 0; row < rowCount(); ++row) {
         qDebug() << "URL we got is" << sourceModel()->data(index(row, 0), ResultModel::ResourceRole);
-        knownUrls << sourceModel()->data(index(row, 0), ResultModel::ResourceRole).toString();
+        knownUrls <<
+            urlForId(sourceModel()->data(index(row, 0), ResultModel::ResourceRole).toString());
     }
 
     qDebug() << "Known urls are: " << knownUrls;
@@ -170,7 +174,9 @@ void KAStatsFavoritesModel::removeOldCachedEntries() const
     while (i.hasNext()) {
         i.next();
 
-        if (!knownUrls.contains(i.key())) {
+        const auto url = urlForId(i.key());
+
+        if (!knownUrls.contains(url)) {
             delete i.value();
             i.remove();
         }
@@ -180,7 +186,7 @@ void KAStatsFavoritesModel::removeOldCachedEntries() const
 bool KAStatsFavoritesModel::isFavorite(const QString &id) const
 {
     removeOldCachedEntries();
-    return m_entries.contains(urlForId(id));
+    return m_entries.contains(id);
 }
 
 void KAStatsFavoritesModel::addFavorite(const QString &id, int index)
@@ -292,21 +298,27 @@ AbstractEntry *KAStatsFavoritesModel::favoriteFromId(const QString &id) const
         const QUrl url(id);
         const QString &scheme = url.scheme();
 
-        qDebug() << "URL: " << id << " scheme is " << scheme << " valid " << url.isValid();
+        qDebug() << "favoriteFromId: " << id << " - " << url << " - " << scheme;
 
         AbstractEntry *entry = nullptr;
 
-        if (scheme == QStringLiteral("applications")
-                || scheme == QStringLiteral("preferred")
-                || (scheme.isEmpty() && id.contains(QStringLiteral(".desktop")))) {
-            entry = new AppEntry(_this, id);
-        } else if (scheme == QStringLiteral("ktp")) {
+        if (scheme == "ktp") {
             entry = new ContactEntry(_this, id);
-        } else if (url.isValid()) {
-            auto _url = scheme.isEmpty() ? QUrl::fromLocalFile(id)
-                                         : url;
-            entry = new FileEntry(_this, _url);
+        } else {
+            entry = new AppEntry(_this, id);
         }
+
+        // if (scheme == QStringLiteral("applications")
+        //         || scheme == QStringLiteral("preferred")
+        //         || (scheme.isEmpty() && id.endsWith(QStringLiteral(".desktop")))) {
+        //     entry = new AppEntry(_this, id);
+        // } else if (scheme == QStringLiteral("ktp")) {
+        //     entry = new ContactEntry(_this, id);
+        // } else if (url.isValid()) {
+        //     auto _url = scheme.isEmpty() ? QUrl::fromLocalFile(id)
+        //                                  : url;
+        //     entry = new FileEntry(_this, _url);
+        // }
 
         m_entries[id] = entry;
     }
@@ -346,6 +358,16 @@ QStringList KAStatsFavoritesModel::linkedActivitiesFor(const QString &id) const
 {
     auto url = urlForId(id);
 
+    if (!url.isValid()) {
+        return {};
+    }
+
+    auto urlString =
+        url.scheme() == "file" ?
+            url.toLocalFile() : url.toString();
+
+    qDebug() << "Fetching linked activities for: " << id << url;
+
     auto query = LinkedResources
                     | Agent {
                         "org.kde.plasma.favorites.applications",
@@ -353,14 +375,16 @@ QStringList KAStatsFavoritesModel::linkedActivitiesFor(const QString &id) const
                       }
                     | Type::any()
                     | Activity::any()
-                    | Url(url.toString());
+                    | Url(urlString);
 
     ResultSet results(query);
 
     for (const auto &result: results) {
+        qDebug() << "Linked activities for " << id << "are" << result.linkedActivities();
         return result.linkedActivities();
     }
 
+    qDebug() << "NO linked activities for " << id;
     return {};
 }
 

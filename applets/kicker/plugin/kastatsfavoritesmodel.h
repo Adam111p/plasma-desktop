@@ -118,7 +118,7 @@ class KAStatsFavoritesModel : public ForwardingModel
         int m_dropPlaceholderIndex;
         KActivities::Stats::ResultModel *m_sourceModel;
         KActivities::Consumer *m_activities;
-        mutable QStringList m_invalidUrls;
+        mutable QList<QUrl> m_invalidUrls;
 
         KConfig m_config;
 };
