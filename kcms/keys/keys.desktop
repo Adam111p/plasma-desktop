@@ -32,6 +32,7 @@ Name[nn]=Globale snarvegar
 Name[pa]=ਗਲੋਬਲ ਸ਼ਾਰਟਕੱਟ
 Name[pl]=Skróty globalne
 Name[pt]=Atalhos Globais
+Name[pt_BR]=Atalhos globais
 Name[ru]=Глобальные комбинации клавиш
 Name[sk]=Globálne skratky
 Name[sl]=Splošne bližnjice
@@ -47,7 +48,6 @@ Name[zh_TW]=全域捷徑
 
 Comment=Global Keyboard Shortcuts
 Comment[ar]=اختصارات لوحة المفاتيح العموميّة
-Comment[ast]=Atayos de tecláu globales
 Comment[bs]=Globalne prečice sa tastature
 Comment[ca]=Dreceres de teclat globals
 Comment[ca@valencia]=Dreceres de teclat globals
