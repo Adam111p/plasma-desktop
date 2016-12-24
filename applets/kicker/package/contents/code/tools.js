@@ -67,23 +67,53 @@ function createFavoriteActions(favoriteModel, favoriteId) {
     } else {
         var actions = [];
 
-        var action = {};
-
-        // if (favoriteModel.isFavorite(favoriteId)) {
-        //     action.text = i18n("Remove from Favorites");
-        //     action.icon = "list-remove";
-        //     action.actionId = "_kicker_favorite_remove";
-        // } else if (favoriteModel.maxFavorites == -1 || favoriteModel.count < favoriteModel.maxFavorites) {
-        //     action.text = i18n("Add to Favorites");
-        //     action.icon = "bookmark-new";
-        //     action.actionId = "_kicker_favorite_add";
-        // }
-        //
-        // actions = [action];
-
-        action.actionArgument = { favoriteModel: favoriteModel, favoriteId: favoriteId };
-
         var linkedActivities = favoriteModel.linkedActivitiesFor(favoriteId);
+
+        // Adding the item to link/unlink to all activities
+
+        var linkedToAllActivities =
+            !(linkedActivities.indexOf(":global") === -1);
+
+        actions.push({
+            text     : i18n("On All Activities"),
+            checkable : true,
+
+            actionId  : linkedToAllActivities ?
+                             "_kicker_favorite_remove_from_activity" :
+                             "_kicker_favorite_add_to_activity",
+            checked   : linkedToAllActivities,
+
+            actionArgument : {
+                favoriteModel: favoriteModel,
+                favoriteId: favoriteId,
+                favoriteActivity: ""
+            }
+        });
+
+        // Adding the item to link/unlink to the current activity
+
+        var linkedToCurrentActivity =
+            !(linkedActivities.indexOf(favoriteModel.activities.currentActivity) === -1);
+
+        actions.push({
+            text      : i18n("On The Current Activity"),
+            checkable : true,
+
+            actionId  : linkedToCurrentActivity ?
+                             "_kicker_favorite_remove_from_activity" :
+                             "_kicker_favorite_add_to_activity",
+            checked   : linkedToCurrentActivity,
+
+            actionArgument : {
+                favoriteModel: favoriteModel,
+                favoriteId: favoriteId,
+                favoriteActivity: favoriteModel.activities.currentActivity
+            }
+        });
+
+        actions.push({ type: "separator" });
+
+        // Adding the items for each activity
 
         activities.forEach(function(activityId) {
             var action = {};
