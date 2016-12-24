@@ -70,8 +70,6 @@ QVariant KAStatsFavoritesModel::data(const QModelIndex& index, int role) const
     const QString id =
         sourceModel()->data(index, ResultModel::ResourceRole).toString();
 
-    qDebug() << "URL" << id;
-
     // const casts are bad, but we can not achieve this
     // with the standard 'mutable' members for lazy evaluation,
     // at least, not with the current design of the library
@@ -218,6 +216,8 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
 
     const auto url = urlForId(id);
 
+    qDebug() << "Adding favorite to " << id << activity << url;
+
     // This is a file, we want to check that it exists
     if (url.isLocalFile() && !QFileInfo::exists(url.toLocalFile())) return;
 
@@ -230,6 +230,8 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
 void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const Activity &activity)
 {
     const auto url = urlForId(id);
+
+    qDebug() << "Removing favorite from " << id << activity << url;
 
     m_sourceModel->unlinkFromActivity(
             url, activity,
@@ -275,6 +277,7 @@ void KAStatsFavoritesModel::refresh()
                       }
                     | Type::any()
                     | Activity::current()
+                    | Activity::global()
                     | Limit(15);
 
     m_sourceModel = new ResultModel(query, "org.kde.plasma.favorites");
@@ -308,18 +311,6 @@ AbstractEntry *KAStatsFavoritesModel::favoriteFromId(const QString &id) const
             entry = new AppEntry(_this, id);
         }
 
-        // if (scheme == QStringLiteral("applications")
-        //         || scheme == QStringLiteral("preferred")
-        //         || (scheme.isEmpty() && id.endsWith(QStringLiteral(".desktop")))) {
-        //     entry = new AppEntry(_this, id);
-        // } else if (scheme == QStringLiteral("ktp")) {
-        //     entry = new ContactEntry(_this, id);
-        // } else if (url.isValid()) {
-        //     auto _url = scheme.isEmpty() ? QUrl::fromLocalFile(id)
-        //                                  : url;
-        //     entry = new FileEntry(_this, _url);
-        // }
-
         m_entries[id] = entry;
     }
 
@@ -330,8 +321,20 @@ QUrl KAStatsFavoritesModel::urlForId(const QString &id) const
 {
     const auto entry = favoriteFromId(id);
 
-    return entry && entry->isValid() ? entry->url()
-                                     : QUrl();
+    const auto url = entry && entry->isValid() ? entry->url()
+                                               : QUrl();
+
+    // We want to resolve symbolic links not to have two paths
+    // refer to the same .desktop file
+    if (url.isLocalFile()) {
+        QFileInfo file(url.toLocalFile());
+
+        if (file.exists()) {
+            return QUrl::fromLocalFile(file.canonicalFilePath());
+        }
+    }
+
+    return url;
 }
 
 QString KAStatsFavoritesModel::agentForScheme(const QString &scheme) const
@@ -366,7 +369,7 @@ QStringList KAStatsFavoritesModel::linkedActivitiesFor(const QString &id) const
         url.scheme() == "file" ?
             url.toLocalFile() : url.toString();
 
-    qDebug() << "Fetching linked activities for: " << id << url;
+    qDebug() << "Fetching linked activities for: " << id << urlString;
 
     auto query = LinkedResources
                     | Agent {
