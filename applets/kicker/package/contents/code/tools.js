@@ -83,8 +83,6 @@ function createFavoriteActions(favoriteModel, favoriteId) {
                              "_kicker_favorite_add_to_activity",
             checked   : linkedToAllActivities,
 
-            inActivitiesSubmenu : true,
-
             actionArgument : {
                 favoriteModel: favoriteModel,
                 favoriteId: favoriteId,
@@ -105,8 +103,6 @@ function createFavoriteActions(favoriteModel, favoriteId) {
                              "_kicker_favorite_remove_from_activity" :
                              "_kicker_favorite_add_to_activity",
             checked   : linkedToCurrentActivity,
-
-            inActivitiesSubmenu : true,
 
             actionArgument : {
                 favoriteModel: favoriteModel,
@@ -144,7 +140,10 @@ function createFavoriteActions(favoriteModel, favoriteId) {
             actions.push(action);
         });
 
-        return actions;
+        return [{
+            text       : i18n("Show In Favorites"),
+            subActions : actions
+        }];
     }
 }
 

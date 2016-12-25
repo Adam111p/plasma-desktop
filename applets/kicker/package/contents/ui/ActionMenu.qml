@@ -64,15 +64,28 @@ Item {
 
         menu = contextMenuComponent.createObject(root);
 
-        actionList.forEach(function(actionItem) {
-            var item = contextMenuItemComponent.createObject(
-                (!actionItem.actionId || actionItem.actionId.indexOf("favorite") === -1) ?
-                    menu : menu.activitiesMenu,
-                {
-                    "actionItem": actionItem,
-                }
-            );
+        fillMenu(menu, actionList);
+    }
+
+    function fillMenu(menu, items) {
+        items.forEach(function(actionItem) {
+            if (actionItem.subActions) {
+                // This is a menu
+                var submenuItem = contextSubmenuItemComponent.createObject(
+                                          menu, { "actionItem" : actionItem });
+
+                fillMenu(submenuItem.submenu, actionItem.subActions);
+
+            } else {
+                var item = contextMenuItemComponent.createObject(
+                                menu,
+                                {
+                                    "actionItem": actionItem,
+                                }
+                );
+            }
         });
+
     }
 
     Component {
@@ -80,19 +93,24 @@ Item {
 
         PlasmaComponents.ContextMenu {
             visualParent: root.visualParent
+        }
+    }
 
-            property alias activitiesMenu : activitiesMenu_
+    Component {
+        id: contextSubmenuItemComponent
 
-            PlasmaComponents.MenuItem {
-                id: activitiesMenuItem
+        PlasmaComponents.MenuItem {
+            id: submenuItem
 
-                text: i18n("Show In Favorites")
-                visible: true
+            property variant actionItem
 
-                PlasmaComponents.ContextMenu {
-                    id: activitiesMenu_
-                    visualParent: activitiesMenuItem.action
-                }
+            text: actionItem.text ? actionItem.text : ""
+
+            property variant submenu : submenu_
+
+            PlasmaComponents.ContextMenu {
+                id: submenu_
+                visualParent: submenuItem.action
             }
         }
     }
@@ -103,13 +121,13 @@ Item {
         PlasmaComponents.MenuItem {
             property variant actionItem
 
-            text: actionItem.text ? actionItem.text : ""
-            enabled: actionItem.type != "title" && ("enabled" in actionItem ? actionItem.enabled : true)
-            separator: actionItem.type == "separator"
-            section: actionItem.type == "title"
-            icon: actionItem.icon ? actionItem.icon : null
-            checkable: actionItem.checkable ? actionItem.checkable : false
-            checked: actionItem.checked ? actionItem.checked : false
+            text      : actionItem.text ? actionItem.text : ""
+            enabled   : actionItem.type != "title" && ("enabled" in actionItem ? actionItem.enabled : true)
+            separator : actionItem.type == "separator"
+            section   : actionItem.type == "title"
+            icon      : actionItem.icon ? actionItem.icon : null
+            checkable : actionItem.checkable ? actionItem.checkable : false
+            checked   : actionItem.checked ? actionItem.checked : false
 
             onClicked: {
                 actionClicked(actionItem.actionId, actionItem.actionArgument);
