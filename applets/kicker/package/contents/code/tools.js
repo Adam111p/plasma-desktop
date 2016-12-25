@@ -75,12 +75,12 @@ function createFavoriteActions(favoriteModel, favoriteId) {
             !(linkedActivities.indexOf(":global") === -1);
 
         actions.push({
-            text     : i18n("On All Activities"),
+            text      : i18n("On All Activities"),
             checkable : true,
 
             actionId  : linkedToAllActivities ?
                              "_kicker_favorite_remove_from_activity" :
-                             "_kicker_favorite_add_to_activity",
+                             "_kicker_favorite_set_to_activity",
             checked   : linkedToAllActivities,
 
             actionArgument : {
@@ -90,26 +90,42 @@ function createFavoriteActions(favoriteModel, favoriteId) {
             }
         });
 
+
+        // Adding items for each activity separately
+
+        var addActivityItem = function(activityId, activityName) {
+            var linkedToThisActivity =
+                !(linkedActivities.indexOf(activityId) === -1);
+
+            actions.push({
+                text      : activityName,
+                checkable : true,
+                checked   : linkedToThisActivity && !linkedToAllActivities,
+
+                actionId :
+                    // If we are on all activities, and the user clicks just one
+                    // specific activity, unlink from everything else
+                    linkedToAllActivities ? "_kicker_favorite_set_to_activity" :
+
+                    // If we are linked to the current activity, just unlink from
+                    // that single one
+                    linkedToThisActivity ? "_kicker_favorite_remove_from_activity" :
+
+                    // Otherwise, link to this activity, but do not unlink from
+                    // other ones
+                    "_kicker_favorite_add_to_activity",
+
+                actionArgument : {
+                    favoriteModel    : favoriteModel,
+                    favoriteId       : favoriteId,
+                    favoriteActivity : activityId
+                }
+            });
+        };
+
         // Adding the item to link/unlink to the current activity
 
-        var linkedToCurrentActivity =
-            !(linkedActivities.indexOf(favoriteModel.activities.currentActivity) === -1);
-
-        actions.push({
-            text      : i18n("On The Current Activity"),
-            checkable : true,
-
-            actionId  : linkedToCurrentActivity ?
-                             "_kicker_favorite_remove_from_activity" :
-                             "_kicker_favorite_add_to_activity",
-            checked   : linkedToCurrentActivity,
-
-            actionArgument : {
-                favoriteModel: favoriteModel,
-                favoriteId: favoriteId,
-                favoriteActivity: favoriteModel.activities.currentActivity
-            }
-        });
+        addActivityItem(favoriteModel.activities.currentActivity, i18n("On The Current Activity"));
 
         actions.push({
             type: "separator",
@@ -119,29 +135,12 @@ function createFavoriteActions(favoriteModel, favoriteId) {
         // Adding the items for each activity
 
         activities.forEach(function(activityId) {
-            var action = {};
-            action.text = favoriteModel.activityNameForId(activityId);
-            action.checkable = true;
-
-            if (linkedActivities.indexOf(activityId) === -1) {
-                action.actionId = "_kicker_favorite_add_to_activity";
-                action.checked = false;
-            } else {
-                action.actionId = "_kicker_favorite_remove_from_activity";
-                action.checked = true;
-            }
-
-            action.actionArgument = {
-                favoriteModel: favoriteModel,
-                favoriteId: favoriteId,
-                favoriteActivity: activityId
-            };
-
-            actions.push(action);
+            addActivityItem(activityId, favoriteModel.activityNameForId(activityId));
         });
 
         return [{
             text       : i18n("Show In Favorites"),
+            icon       : "favorite",
             subActions : actions
         }];
     }
@@ -177,15 +176,24 @@ function handleFavoriteAction(actionId, actionArgument) {
     }
 
     if (actionId == "_kicker_favorite_remove") {
-        favoriteModel.removeFavorite(favoriteId);
+        console.log("Removing from all activities");
+        favoriteModel.removeFavoriteFrom(favoriteId, ":any");
 
     } else if (actionId == "_kicker_favorite_add") {
-        favoriteModel.addFavorite(favoriteId);
+        console.log("Adding to global activity");
+        favoriteModel.addFavoriteTo(favoriteId, ":global");
 
     } else if (actionId == "_kicker_favorite_remove_from_activity") {
+        console.log("Removing from a specific activity");
         favoriteModel.removeFavoriteFrom(favoriteId, actionArgument.favoriteActivity);
 
     } else if (actionId == "_kicker_favorite_add_to_activity") {
+        console.log("Adding to another activity");
+        favoriteModel.addFavoriteTo(favoriteId, actionArgument.favoriteActivity);
+
+    } else if (actionId == "_kicker_favorite_set_to_activity") {
+        console.log("Removing the item from the favourites, and re-adding it just to be on a specific activity");
+        favoriteModel.removeFavoriteFrom(favoriteId, ":any");
         favoriteModel.addFavoriteTo(favoriteId, actionArgument.favoriteActivity);
 
     }

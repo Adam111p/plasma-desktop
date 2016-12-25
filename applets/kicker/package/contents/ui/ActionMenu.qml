@@ -105,6 +105,7 @@ Item {
             property variant actionItem
 
             text: actionItem.text ? actionItem.text : ""
+            icon: actionItem.icon ? actionItem.icon : null
 
             property variant submenu : submenu_
 
