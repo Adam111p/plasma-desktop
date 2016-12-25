@@ -83,6 +83,8 @@ function createFavoriteActions(favoriteModel, favoriteId) {
                              "_kicker_favorite_add_to_activity",
             checked   : linkedToAllActivities,
 
+            inActivitiesSubmenu : true,
+
             actionArgument : {
                 favoriteModel: favoriteModel,
                 favoriteId: favoriteId,
@@ -104,6 +106,8 @@ function createFavoriteActions(favoriteModel, favoriteId) {
                              "_kicker_favorite_add_to_activity",
             checked   : linkedToCurrentActivity,
 
+            inActivitiesSubmenu : true,
+
             actionArgument : {
                 favoriteModel: favoriteModel,
                 favoriteId: favoriteId,
@@ -111,7 +115,10 @@ function createFavoriteActions(favoriteModel, favoriteId) {
             }
         });
 
-        actions.push({ type: "separator" });
+        actions.push({
+            type: "separator",
+            actionId: "_kicker_favorite_separator"
+        });
 
         // Adding the items for each activity
 

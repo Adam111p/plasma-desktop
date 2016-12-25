@@ -65,9 +65,13 @@ Item {
         menu = contextMenuComponent.createObject(root);
 
         actionList.forEach(function(actionItem) {
-            var item = contextMenuItemComponent.createObject(menu, {
-                "actionItem": actionItem,
-            });
+            var item = contextMenuItemComponent.createObject(
+                (!actionItem.actionId || actionItem.actionId.indexOf("favorite") === -1) ?
+                    menu : menu.activitiesMenu,
+                {
+                    "actionItem": actionItem,
+                }
+            );
         });
     }
 
@@ -76,6 +80,20 @@ Item {
 
         PlasmaComponents.ContextMenu {
             visualParent: root.visualParent
+
+            property alias activitiesMenu : activitiesMenu_
+
+            PlasmaComponents.MenuItem {
+                id: activitiesMenuItem
+
+                text: i18n("Show In Favorites")
+                visible: true
+
+                PlasmaComponents.ContextMenu {
+                    id: activitiesMenu_
+                    visualParent: activitiesMenuItem.action
+                }
+            }
         }
     }
 
