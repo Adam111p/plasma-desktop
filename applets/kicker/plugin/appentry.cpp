@@ -24,15 +24,13 @@
 #include "containmentinterface.h"
 #include "menuentryeditor.h"
 
-#ifdef PackageKitQt5_FOUND
-#include "findpackagenamejob.h"
-#endif
-
 #include <config-X11.h>
+#include <config-appstream.h>
 
 #include <QProcess>
 #include <QQmlPropertyMap>
 #include <QStandardPaths>
+#include <QDesktopServices>
 #if HAVE_X11
 #include <QX11Info>
 #endif
@@ -49,6 +47,10 @@
 #include <KStartupInfo>
 
 #include <Plasma/Plasma>
+
+#ifdef HAVE_APPSTREAMQT
+#include <AppStreamQt/pool.h>
+#endif
 
 MenuEntryEditor *AppEntry::m_menuEntryEditor = nullptr;
 
@@ -139,6 +141,28 @@ bool AppEntry::hasActions() const
     return true;
 }
 
+#ifdef HAVE_APPSTREAMQT
+Q_GLOBAL_STATIC(AppStream::Pool, appstreamPool)
+
+QVariantList appstreamActions(const KService::Ptr &service)
+{
+    if (!appstreamPool.exists()) {
+        appstreamPool->load();
+    }
+
+    QVariantList ret;
+    const auto components = appstreamPool->componentsById(service->desktopEntryName()+QLatin1String(".desktop"));
+    for(const auto &component: components) {
+        const QString componentId = component.id();
+
+        QVariantMap appstreamAction = Kicker::createActionItem(i18nc("@action opens a software center with the application", "Manage '%1'...", component.name()), "manageApplication", QVariant(QStringLiteral("appstream://") + componentId));
+        appstreamAction[QStringLiteral("icon")] = QStringLiteral("applications-other");
+        ret << appstreamAction;
+    }
+    return ret;
+}
+#endif
+
 QVariantList AppEntry::actions() const
 {
     QVariantList actionList;
@@ -177,22 +201,10 @@ QVariantList AppEntry::actions() const
         actionList << editAction;
     }
 
-#ifdef PackageKitQt5_FOUND
-    /*QStringList files(m_service->entryPath());
-
+#ifdef HAVE_APPSTREAMQT
     if (m_service->isApplication()) {
-        files += QStandardPaths::findExecutable(KShell::splitArgs(m_service->exec()).first());
+        actionList << appstreamActions(m_service);
     }
-
-    FindPackageJob* job = new FindPackageJob(files); // TODO: Would be great to make this async.
-
-    if (job->exec() && !job->packageNames().isEmpty()) {
-        QString packageName = job->packageNames().first();
-
-        QVariantMap removeAction = Kicker::createActionItem(i18n("Remove '%1'...", packageName), "removeApplication", packageName);
-        removeAction["icon"] = "applications-other";
-        actionList << removeAction;
-    }*/
 #endif
 
     QQmlPropertyMap *appletConfig = qobject_cast<QQmlPropertyMap *>(appletInterface->property("configuration").value<QObject *>());
@@ -240,16 +252,8 @@ bool AppEntry::run(const QString& actionId, const QVariant &argument)
         m_menuEntryEditor->edit(m_service->entryPath(), m_service->menuId());
 
         return true;
-    } else if (actionId == "removeApplication") {
-        QQmlPropertyMap *appletConfig = qobject_cast<QQmlPropertyMap *>(appletInterface->property("configuration").value<QObject *>());
-
-        if (appletConfig && appletConfig->contains("removeApplicationCommand")) {
-            const QStringList &removeAppCmd = KShell::splitArgs(appletConfig->value("removeApplicationCommand").toString());
-
-            if (!removeAppCmd.isEmpty()) {
-                return QProcess::startDetached(removeAppCmd.first(), removeAppCmd.mid(1) << argument.toString());
-            }
-        }
+    } else if (actionId == "manageApplication") {
+        return QDesktopServices::openUrl(QUrl(argument.toString()));
     } else if (actionId == "_kicker_jumpListAction") {
         return KRun::run(argument.toString(), {}, nullptr, m_service->name(), m_service->icon());
     }

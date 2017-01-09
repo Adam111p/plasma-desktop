@@ -63,12 +63,12 @@ find_package(KRunnerAppDBusInterface CONFIG REQUIRED)
 find_package(KSMServerDBusInterface CONFIG REQUIRED)
 find_package(KF5ItemModels CONFIG REQUIRED)
 find_package(KF5Emoticons CONFIG REQUIRED)
-find_package(PackageKitQt5 0.9)
-set_package_properties(PackageKitQt5 PROPERTIES DESCRIPTION "Software Manager integration"
-                       TYPE OPTIONAL
-                       PURPOSE "Provides package management integration to the application launcher."
-                      )
 
+find_package(AppStreamQt 0.10.4)
+set_package_properties(AppStreamQt PROPERTIES DESCRIPTION "Appstream integration"
+                       TYPE RECOMMENDED
+                       PURPOSE "Needed to allow appstream integration from application menus"
+                      )
 find_package(KF5Baloo)
 set_package_properties(KF5Baloo PROPERTIES DESCRIPTION "File Searching"
                        TYPE RECOMMENDED
@@ -129,10 +129,29 @@ else()
                         )
 endif()
 
+find_package(Breeze ${PROJECT_VERSION} CONFIG)
+set_package_properties(Breeze PROPERTIES
+                       TYPE OPTIONAL
+                       PURPOSE "For setting the default window decoration plugin")
+if(${Breeze_FOUND})
+    if(${BREEZE_WITH_KDECORATION})
+        set(HAVE_BREEZE_DECO true)
+    else()
+        set(HAVE_BREEZE_DECO FALSE)
+    endif()
+else()
+    set(HAVE_BREEZE_DECO FALSE)
+endif()
+
+if(${AppStreamQt_FOUND})
+    set(HAVE_APPSTREAMQT true)
+endif()
+
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
 configure_file(config-workspace.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-workspace.h)
 configure_file(config-unix.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-unix.h )
+configure_file(config-appstream.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-appstream.h )
 configure_file(config-X11.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-X11.h)
 configure_file(config-runtime.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config-runtime.h)
 

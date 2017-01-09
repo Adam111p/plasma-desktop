@@ -216,7 +216,7 @@ Item {
                             leftMargin: units.smallSpacing
                         }
 
-                        width: main.GridView.view.iconSize
+                        width: root.useListViewMode ? main.GridView.view.iconSize : (parent.width - 2 * units.smallSpacing)
                         height: main.GridView.view.iconSize
 
                         opacity: root.useListViewMode ? (1.3 - selectionButton.opacity) : 1.0
@@ -225,6 +225,7 @@ Item {
                         usesPlasmaTheme: false
 
                         source: model.decoration
+                        overlays: model.overlays
                     }
 
                     TextMetrics {
@@ -303,6 +304,8 @@ Item {
                         color: textShadow.visible ? "white" : PlasmaCore.ColorScope.textColor
 
                         text: model.blank ? "" : model.display
+
+                        font.italic: model.isLink
 
                         Component.onCompleted: textFix.disableMouseHandling(label) // FIXME TODO: See https://codereview.qt-project.org/#/c/113758/
                     }

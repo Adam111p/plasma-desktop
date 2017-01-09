@@ -90,8 +90,10 @@ class FolderModel : public QSortFilterProxyModel
     public:
         enum DataRole {
             BlankRole = Qt::UserRole + 1,
+            OverlaysRole,
             SelectedRole,
             IsDirRole,
+            IsLinkRole,
             UrlRole,
             LinkDestinationUrl,
             SizeRole,
@@ -161,6 +163,7 @@ class FolderModel : public QSortFilterProxyModel
         Q_INVOKABLE void cd(int row);
 
         Q_INVOKABLE void run(int row);
+        Q_INVOKABLE void runSelected();
 
         Q_INVOKABLE void rename(int row, const QString &name);
         Q_INVOKABLE int fileExtensionBoundary(int row);

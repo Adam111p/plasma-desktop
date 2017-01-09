@@ -151,8 +151,10 @@ QHash< int, QByteArray > FolderModel::staticRoleNames()
     roleNames[Qt::DisplayRole] = "display";
     roleNames[Qt::DecorationRole] = "decoration";
     roleNames[BlankRole] = "blank";
+    roleNames[OverlaysRole] = "overlays";
     roleNames[SelectedRole] = "selected";
     roleNames[IsDirRole] = "isDir";
+    roleNames[IsLinkRole] = "isLink";
     roleNames[UrlRole] = "url";
     roleNames[LinkDestinationUrl] = "linkDestinationUrl";
     roleNames[SizeRole] = "size";
@@ -513,6 +515,22 @@ void FolderModel::run(int row)
     }
 
     new KRun(url, 0);
+}
+
+void FolderModel::runSelected()
+{
+    if (!m_selectionModel->hasSelection()) {
+        return;
+    }
+
+    bool unarySelection = (m_selectionModel->selectedIndexes().count() == 1);
+
+    foreach (const QModelIndex &index, m_selectionModel->selectedIndexes()) {
+        // Skip over directories.
+        if (!unarySelection && !index.data(IsDirRole).toBool()) {
+            run(index.row());
+        }
+    }
 }
 
 void FolderModel::rename(int row, const QString& name)
@@ -936,6 +954,9 @@ QVariant FolderModel::data(const QModelIndex& index, int role) const
 
     if (role == BlankRole) {
         return m_dragIndexes.contains(index);
+    } else if (role == OverlaysRole) {
+        const KFileItem item = itemForIndex(index);
+        return item.overlays();
     } else if (role == SelectedRole) {
         return m_selectionModel->isSelected(index);
     } else if (role == IsDirRole) {
@@ -946,6 +967,9 @@ QVariant FolderModel::data(const QModelIndex& index, int role) const
         } else {
             return isDir(mapToSource(index), m_dirModel);
         }
+    } else if (role == IsLinkRole) {
+        const KFileItem item = itemForIndex(index);
+        return item.isLink();
     } else if (role == UrlRole) {
         return itemForIndex(index).url();
     } else if (role == LinkDestinationUrl) {

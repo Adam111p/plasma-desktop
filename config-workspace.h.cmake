@@ -143,14 +143,18 @@
 /* xkb resources directory */
 #cmakedefine XKBDIR "${XKBDIR}"
 
-/* PackageKit-Qt has been found */
-#cmakedefine PackageKitQt5_FOUND 1
-
 /* KWin binary name */
 #define KWIN_BIN "${KWIN_BIN}"
 
 /* Number of bits in a file offset, on hosts where this is settable. */
 #define _FILE_OFFSET_BITS 64
+
+/* Define 1 if the Breeze window decoration was found */
+#cmakedefine HAVE_BREEZE_DECO 1
+
+#if HAVE_BREEZE_DECO
+#define BREEZE_KDECORATION_PLUGIN_ID "${BREEZE_KDECORATION_PLUGIN_ID}"
+#endif
 
 /*
  * On HP-UX, the declaration of vsnprintf() is needed every time !
