@@ -41,6 +41,12 @@ Item {
 
     Plasmoid.preferredRepresentation: Plasmoid.fullRepresentation
 
+    Plasmoid.onUserConfiguringChanged: {
+        if (plasmoid.userConfiguring) {
+            groupDialog.visible = false;
+        }
+    }
+
     Layout.fillWidth: true
     Layout.fillHeight:true
     Layout.minimumWidth: tasks.vertical ? 0 : LayoutManager.preferredMinWidth()
@@ -104,7 +110,7 @@ Item {
         }
 
         groupMode: iconsOnly ? TaskManager.TasksModel.GroupApplication
-            : sortModeEnumValue(plasmoid.configuration.groupingStrategy)
+            : groupModeEnumValue(plasmoid.configuration.groupingStrategy)
         groupInline: !plasmoid.configuration.groupPopups
         groupingWindowTasksThreshold: (plasmoid.configuration.onlyGroupWhenFull && !iconsOnly
             ? LayoutManager.optimumCapacity(width, height) + 1 : -1)
@@ -158,6 +164,18 @@ Item {
         }
     }
 
+    Connections {
+        enabled: plasmoid.configuration.groupPopups
+
+        target: tasksModel
+
+        onActiveTaskChanged: {
+            if (tasksModel.activeTask.parent.valid) {
+                groupDialog.activeTask = tasksModel.activeTask;
+            }
+        }
+    }
+
     TaskManager.VirtualDesktopInfo {
         id: virtualDesktopInfo
     }
@@ -169,8 +187,9 @@ Item {
     TaskManagerApplet.Backend {
         id: backend
 
-        taskManagerItem: groupDialog.visible ? null : tasks
+        taskManagerItem: tasks
         toolTipItem: toolTipDelegate
+        groupDialog: groupDialog
         highlightWindows: plasmoid.configuration.highlightWindows
 
         onAddLauncher: {
@@ -198,8 +217,7 @@ Item {
                     continue;
                 }
                 var sourceData = data[source];
-
-                if (sourceData && sourceData.DesktopEntry === desktopFileName && sourceData.InstancePid === pid) {
+                if (sourceData && sourceData.DesktopEntry === desktopFileName && (pid === undefined || sourceData.InstancePid === pid)) {
                     return source;
                 }
             }
@@ -412,12 +430,14 @@ Item {
         dragSource = null;
     }
 
-    function createContextMenu(rootTask, modelIndex) {
-        var menu = tasks.contextMenuComponent.createObject(rootTask);
-        menu.visualParent = rootTask;
-        menu.modelIndex = modelIndex;
-        menu.mpris2Source = mpris2Source;
-        return menu;
+    function createContextMenu(rootTask, modelIndex, args) {
+        var initialArgs = args || {}
+        initialArgs.visualParent = rootTask;
+        initialArgs.modelIndex = modelIndex;
+        initialArgs.mpris2Source = mpris2Source;
+        initialArgs.backend = backend;
+
+        return tasks.contextMenuComponent.createObject(rootTask, initialArgs);
     }
 
     Component.onCompleted: {

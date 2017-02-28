@@ -220,6 +220,8 @@ QVariant ComputerModel::data(const QModelIndex &index, int role) const
 
                 if (access) {
                     return access->filePath();
+                } else {
+                    return QString();
                 }
             } else {
                 const QUrl &url = m_filteredPlacesModel->url(sourceIndex);

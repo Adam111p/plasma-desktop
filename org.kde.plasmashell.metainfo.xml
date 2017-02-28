@@ -8,6 +8,7 @@
   <name xml:lang="ast">Escritoriu Plasma de KDE</name>
   <name xml:lang="ca">Escriptori Plasma del KDE</name>
   <name xml:lang="ca-valencia">Escriptori Plasma del KDE</name>
+  <name xml:lang="cs">Plocha KDE Plasma</name>
   <name xml:lang="da">KDE Plasma skrivebordsmiljø</name>
   <name xml:lang="de">KDE-Plasma-Arbeitsfläche</name>
   <name xml:lang="el">Επιφάνεια εργασίας KDE Plasma</name>
@@ -15,6 +16,7 @@
   <name xml:lang="es">Escritorio KDE Plasma</name>
   <name xml:lang="et">KDE¤ Plasma töölaud</name>
   <name xml:lang="fi">KDE Plasma -työpöytä</name>
+  <name xml:lang="ia">KDE Plasma Desktop (Scriptorio KDE Plasma)</name>
   <name xml:lang="it">Desktop KDE Plasma</name>
   <name xml:lang="ko">KDE Plasma 데스크톱</name>
   <name xml:lang="nl">KDE Plasma Bureaublad</name>
@@ -36,6 +38,7 @@
   <summary>KDE's complete desktop experience. Simple by default, powerful when needed</summary>
   <summary xml:lang="ca">Experiència completa d'escriptori del KDE. Senzilla per omissió, potent quan cal</summary>
   <summary xml:lang="ca-valencia">Experiència completa d'escriptori del KDE. Senzilla per omissió, potent quan cal</summary>
+  <summary xml:lang="da">KDE's komplette desktop-oplevelse. Simpelt som standard, kraftfuldt når det behøves</summary>
   <summary xml:lang="el">Η πλήρης εμπειρία επιφάνειας εργασίας του KDE. Προκαθορισμένα απλή, πανίσχυρη όταν χρειάζεται.</summary>
   <summary xml:lang="en-GB">KDE's complete desktop experience. Simple by default, powerful when needed</summary>
   <summary xml:lang="es">Experiencia completa de escritorio de KDE. Sencillo por omisión, potente cuando es necesario.</summary>

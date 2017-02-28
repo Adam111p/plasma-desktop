@@ -42,6 +42,7 @@ Item {
     property alias url: dir.url
     property alias positions: positioner.positions
     property alias errorString: dir.errorString
+    property alias dragging: dir.dragging
     property alias locked: dir.locked
     property alias sortMode: dir.sortMode
     property alias filterMode: dir.filterMode
@@ -56,7 +57,9 @@ Item {
     property alias scrollRight: gridView.scrollRight
     property alias scrollUp: gridView.scrollUp
     property alias scrollDown: gridView.scrollDown
-    property Item upButton: null
+    property alias hoveredItem: gridView.hoveredItem
+    property var history: []
+    property Item backButton: null
 
     function rename()
     {
@@ -67,6 +70,36 @@ Item {
 
     function linkHere(sourceUrl) {
         dir.linkHere(sourceUrl);
+    }
+
+    function handleDragMove(x, y) {
+        var child = childAt(x, y);
+
+        if (child != null && child == backButton) {
+            hoveredItem = null;
+            backButton.handleDragMove();
+        } else {
+            if (backButton && backButton.containsDrag) {
+                backButton.endDragMove();
+            }
+
+            var pos = mapToItem(gridView.contentItem, x, y);
+            var item = gridView.itemAt(pos.x, pos.y);
+
+            if (item && item.isDir) {
+                hoveredItem = item;
+            } else {
+                hoveredItem = null;
+            }
+        }
+    }
+
+    function endDragMove() {
+        if (backButton && backButton.active) {
+            backButton.endDragMove();
+        } else if (hoveredItem && !hoveredItem.popupDialog) {
+            hoveredItem = null;
+        }
     }
 
     function dropItemAt(pos) {
@@ -101,18 +134,40 @@ Item {
         }
     }
 
-    function makeUpButton() {
-        return Qt.createQmlObject("UpButtonItem {}", main);
+    Connections {
+        target: dir
+        onPopupMenuAboutToShow: {
+            plasmoid.processMimeData(mimeData, x, y, dropJob);
+        }
+    }
+    function makeBackButton() {
+        return Qt.createQmlObject("BackButtonItem {}", main);
+    }
+
+    function doCd(row) {
+        history.push(url);
+        updateHistory();
+        dir.cd(row);
+    }
+
+    function doBack() {
+        url = history.pop();
+        updateHistory();
+    }
+
+    // QML doesn't detect change in the array(history) property, so update it explicitly.
+    function updateHistory() {
+        history = history;
     }
 
     Connections {
         target: root
 
         onIsPopupChanged: {
-            if (upButton == null && root.useListViewMode) {
-                upButton = makeUpButton();
-            } else if (upButton != null) {
-                upButton.destroy();
+            if (backButton == null && root.useListViewMode) {
+                backButton = makeBackButton();
+            } else if (backButton != null) {
+                backButton.destroy();
             }
         }
     }
@@ -121,7 +176,7 @@ Item {
         id: listener
 
         anchors {
-            topMargin: upButton != null ? upButton.height : undefined
+            topMargin: backButton != null ? backButton.height : undefined
             fill: parent
         }
 
@@ -164,7 +219,7 @@ Item {
 
             if (mouse.buttons & Qt.BackButton) {
                 if (root.isPopup && dir.resolvedUrl != dir.resolve(plasmoid.configuration.url)) {
-                    dir.up();
+                    doBack();
                 }
 
                 return;
@@ -246,7 +301,7 @@ Item {
 
             if (!(pos.x <= hoveredItem.actionsOverlay.width && pos.y <= hoveredItem.actionsOverlay.height)) {
                 if (Qt.styleHints.singleClickActivation || doubleClickInProgress) {
-                    var func = root.useListViewMode && (mouse.button == Qt.LeftButton) && hoveredItem.isDir ? dir.cd : dir.run;
+                    var func = root.useListViewMode && (mouse.button == Qt.LeftButton) && hoveredItem.isDir ? doCd : dir.run;
                     func(positioner.map(gridView.currentIndex));
 
                     hoveredItem = null;
@@ -321,6 +376,7 @@ Item {
                     pressedItem.toolTip.hideToolTip();
                     dragX = mouse.x;
                     dragY = mouse.y;
+                    gridView.verticalDropHitscanOffset = pressedItem.iconArea.y + (pressedItem.iconArea.height / 2)
                     dir.dragSelected(mouse.x, mouse.y);
                     dragX = -1;
                     dragY = -1;
@@ -383,6 +439,24 @@ Item {
             }
         }
 
+        Timer {
+            id: hoverActivateTimer
+
+            interval: root.hoverActivateDelay
+
+            onTriggered: {
+                if (!hoveredItem) {
+                    return;
+                }
+
+                if (root.useListViewMode) {
+                    doCd(index);
+                } else {
+                    hoveredItem.openPopup();
+                }
+            }
+        }
+
         PlasmaExtras.ScrollArea {
             id: scrollArea
 
@@ -396,6 +470,7 @@ Item {
                 property bool isRootView: false
 
                 property int iconSize: makeIconSize()
+                property int verticalDropHitscanOffset: 0
 
                 property Item hoveredItem: null
 
@@ -436,14 +511,16 @@ Item {
                         + (3 * units.smallSpacing) + (2 * units.largeSpacing));
                 }
 
-                model: positioner
-
                 delegate: FolderItemDelegate {
                     width: gridView.cellWidth
                     height: gridView.cellHeight
                 }
 
                 onContentXChanged: {
+                    if (hoveredItem) {
+                        hoverActivateTimer.stop();
+                    }
+
                     dir.setDragHotSpotScrollOffset(contentX, contentY);
 
                     if (contentX == 0) {
@@ -473,6 +550,10 @@ Item {
                 }
 
                 onContentYChanged: {
+                    if (hoveredItem) {
+                        hoverActivateTimer.stop();
+                    }
+
                     dir.setDragHotSpotScrollOffset(contentX, contentY);
 
                     if (contentY == 0) {
@@ -561,14 +642,18 @@ Item {
                 }
 
                 onCachedRectangleSelectionChanged: {
+                    if (cachedRectangleSelection == null) {
+                        return;
+                    }
+
                     if (cachedRectangleSelection.length) {
                         // Set current index to start of selection.
                         // cachedRectangleSelection is pre-sorted.
                         currentIndex = cachedRectangleSelection[0];
-
-                        dir.updateSelection(cachedRectangleSelection.map(positioner.map),
-                            gridView.ctrlPressed);
                     }
+
+                    dir.updateSelection(cachedRectangleSelection.map(positioner.map),
+                        gridView.ctrlPressed);
                 }
 
                 function makeIconSize() {
@@ -669,7 +754,7 @@ Item {
                 Keys.onReturnPressed: {
                     if (currentIndex != -1 && dir.hasSelection()) {
                         if (root.useListViewMode && currentItem.isDir) {
-                            dir.cd(positioner.map(currentIndex));
+                            doCd(positioner.map(currentIndex));
                         } else {
                             dir.runSelected();
                         }
@@ -738,7 +823,7 @@ Item {
 
                 Keys.onLeftPressed: {
                     if (root.isPopup && dir.resolvedUrl != dir.resolve(plasmoid.configuration.url)) {
-                        dir.up();
+                        doBack();
                     } else if (positioner.enabled) {
                         var newIndex = positioner.nearestItem(currentIndex,
                             FolderTools.effectiveNavDirection(gridView.flow, gridView.effectiveLayoutDirection, Qt.LeftArrow));
@@ -762,7 +847,7 @@ Item {
 
                 Keys.onRightPressed: {
                     if (root.isPopup && currentIndex != -1 && dir.hasSelection()) {
-                        var func = root.isPopup ? dir.cd : dir.run;
+                        var func = root.isPopup ? doCd : dir.run;
                         func(positioner.map(currentIndex));
                     } else if (positioner.enabled) {
                         var newIndex = positioner.nearestItem(currentIndex,
@@ -831,7 +916,7 @@ Item {
 
                 Keys.onBackPressed: {
                     if (root.isPopup && dir.resolvedUrl != dir.resolve(plasmoid.configuration.url)) {
-                        dir.up();
+                        doBack();
                     }
                 }
 
@@ -850,6 +935,15 @@ Item {
                         gridView.iconSize = gridView.makeIconSize();
                     }
                 }
+
+                Connections {
+                   target: plasmoid.configuration
+
+                   onUrlChanged: {
+                       history = [];
+                       updateHistory();
+                   }
+                }
             }
         }
 
@@ -866,9 +960,22 @@ Item {
             usedByContainment: root.isContainment && main.isRootView
             sortDesc: plasmoid.configuration.sortDesc
             sortDirsFirst: plasmoid.configuration.sortDirsFirst
-            parseDesktopFiles: (url == "desktop:/")
+            parseDesktopFiles: (plasmoid.configuration.url == "desktop:/")
             previews: plasmoid.configuration.previews
             previewPlugins: plasmoid.configuration.previewPlugins
+
+            onListingStarted: {
+                if (!gridView.model) {
+                    plasmoid.busy = true;
+                }
+            }
+
+            onListingCompleted: {
+                if (!gridView.model) {
+                    plasmoid.busy = false;
+                    gridView.model = positioner;
+                }
+            }
 
             onMove: {
                 var rows = (gridView.flow == GridView.FlowLeftToRight);
@@ -901,7 +1008,7 @@ Item {
                     }
 
                     itemX = dropPos.x + offset.x + (listener.dragX % cellWidth) + (cellWidth / 2);
-                    itemY = dropPos.y + offset.y + (listener.dragY % cellHeight) + (cellHeight / 2);
+                    itemY = dropPos.y + offset.y + (listener.dragY % cellHeight) + gridView.verticalDropHitscanOffset;
 
                     if (gridView.effectiveLayoutDirection == Qt.RightToLeft) {
                         itemX -= (rows ? gridView.contentX : gridView.originX);
@@ -1095,8 +1202,8 @@ Item {
     }
 
     Component.onCompleted: {
-        if (upButton == null && root.useListViewMode) {
-            upButton = makeUpButton();
+        if (backButton == null && root.useListViewMode) {
+            backButton = makeBackButton();
         }
     }
 }

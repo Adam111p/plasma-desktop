@@ -20,6 +20,7 @@
 #include "iconthemes.h"
 
 #include <config-runtime.h>
+#include "config.h"
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -41,6 +42,7 @@
 #include <QUrl>
 #include <qtemporaryfile.h>
 #include <QApplication>
+#include <QProcess>
 
 #include <KBuildSycocaProgressDialog>
 #include <KLocalizedString>
@@ -319,22 +321,6 @@ void IconThemesConfig::getNewTheme()
   KNS3::DownloadDialog dialog(QStringLiteral("icons.knsrc"), this);
   dialog.exec();
   if (!dialog.changedEntries().isEmpty()) {
-    for(int i = 0; i < dialog.changedEntries().size(); i ++) {
-      if(dialog.changedEntries().at(i).status() == KNS3::Entry::Installed
-         && !dialog.changedEntries().at(i).installedFiles().isEmpty()) {
-          const QString themeTmpFile = dialog.changedEntries().at(i).installedFiles().at(0);
-          const QString name = dialog.changedEntries().at(i).installedFiles().at(0).section('/', -2, -2);
-          qCDebug(KCM_ICONS)<<"IconThemesConfig::getNewTheme() themeTmpFile="<<themeTmpFile<<"name="<<name;
-          QStringList themeNames = findThemeDirs(themeTmpFile);
-          if (themeNames.isEmpty()) {
-              //dialog.changedEntries().at(i)->setStatus(KNS3::Entry::Invalid);
-          }
-          else if (! installThemes(themeNames, themeTmpFile)) {
-              //dialog.changedEntries().at(i)->setStatus(KNS3::Entry::Invalid);
-          }
-      }
-    }
-
     // reload the display icontheme items
     KIconLoader::global()->newIconLoader();
     loadThemes();
@@ -410,15 +396,19 @@ void IconThemesConfig::updateRemoveButton()
 
 void loadPreview(QLabel *label, KIconTheme& icontheme, const QStringList& iconnames)
 {
+    const qreal dpr = label->devicePixelRatioF();
+
     //Given the icontheme loads a preview of an icon (several names are allowed for old theme standards) into the pixmap of the given label
-    const int size = qMin(48, icontheme.defaultSize(KIconLoader::Desktop));
+    const int size = qMin(48, icontheme.defaultSize(KIconLoader::Desktop)) * dpr;
     QSvgRenderer renderer;
     foreach(const QString &iconthemename, QStringList() << icontheme.internalName() << icontheme.inherits()) {
       foreach(const QString &name, iconnames) {
         //load the icon image
         QString path = KIconTheme(iconthemename).iconPath(QStringLiteral("%1.png").arg(name), size, KIconLoader::MatchBest);
         if (path != QString()) {
-            label->setPixmap(QPixmap(path).scaled(size, size));
+            QPixmap pixmap(path);
+            pixmap.setDevicePixelRatio(dpr);
+            label->setPixmap(pixmap.scaled(size, size));
             return;
         }
         //could not find the .png, try loading the .svg or .svgz
@@ -430,8 +420,9 @@ void loadPreview(QLabel *label, KIconTheme& icontheme, const QStringList& iconna
             }
         }
         if (renderer.load(path)) {
-            QPixmap pix(size, size);
-            pix.fill(label->palette().color(QPalette::Background));
+            QPixmap pix(size * dpr, size * dpr);
+            pix.setDevicePixelRatio(dpr);
+            pix.fill(QColor(Qt::transparent));
             QPainter p(&pix);
             p.setViewport(0, 0, size, size);
             renderer.render(&p);
@@ -478,21 +469,9 @@ void IconThemesConfig::save()
   if (!selected)
      return;
 
-  KConfigGroup config(KSharedConfig::openConfig(QStringLiteral("kdeglobals"), KConfig::SimpleConfig), "Icons");
-  config.writeEntry("Theme", selected->data(0, ThemeNameRole).toString());
-  config.sync();
+  QProcess::startDetached(CMAKE_INSTALL_FULL_LIBEXECDIR "/plasma-changeicons", {selected->data(0, ThemeNameRole).toString()});
 
-  KIconTheme::reconfigure();
   emit changed(false);
-
-  KSharedDataCache::deleteCache(QStringLiteral("icon-cache"));
-
-  for (int i=0; i<KIconLoader::LastGroup; i++)
-  {
-    KIconLoader::emitChange(KIconLoader::Group(i));
-  }
-
-  KBuildSycocaProgressDialog::rebuildKSycoca(this);
 
   m_bChanged = false;
   m_removeButton->setEnabled(false);

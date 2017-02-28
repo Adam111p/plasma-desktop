@@ -30,9 +30,12 @@ import org.kde.taskmanager 0.1 as TaskManager
 PlasmaComponents.ContextMenu {
     id: menu
 
+    property QtObject backend
     property QtObject mpris2Source
     property var modelIndex
     readonly property var atm: TaskManager.AbstractTasksModel
+
+    property bool showAllPlaces: false
 
     placement: {
         if (plasmoid.location == PlasmaCore.Types.LeftEdge) {
@@ -53,7 +56,15 @@ PlasmaComponents.ContextMenu {
 
         } else if (status == PlasmaComponents.DialogStatus.Closed) {
             menu.destroy();
+            backend.ungrabMouse(visualParent);
         }
+    }
+
+    Component.onCompleted: {
+        // Cannot have "Connections" as child of PlasmaCoponents.ContextMenu.
+        backend.showAllPlaces.connect(function() {
+            visualParent.showContextMenu({showAllPlaces: true});
+        });
     }
 
     function get(modelProp) {
@@ -62,7 +73,6 @@ PlasmaComponents.ContextMenu {
 
     function show() {
         loadDynamicLaunchActions(get(atm.LauncherUrlWithoutIcon));
-        backend.ungrabMouse(visualParent);
         openRelative();
     }
 
@@ -81,29 +91,23 @@ PlasmaComponents.ContextMenu {
     }
 
     function loadDynamicLaunchActions(launcherUrl) {
-        var actionList = backend.jumpListActions(launcherUrl, menu);
+        var lists = [
+            backend.jumpListActions(launcherUrl, menu),
+            backend.placesActions(launcherUrl, showAllPlaces, menu),
+            backend.recentDocumentActions(launcherUrl, menu)
+        ]
 
-        for (var i = 0; i < actionList.length; ++i) {
-            var item = newMenuItem(menu);
-            item.action = actionList[i];
-            menu.addMenuItem(item, virtualDesktopsMenuItem);
-        }
+        lists.forEach(function (list) {
+            for (var i = 0; i < list.length; ++i) {
+                var item = newMenuItem(menu);
+                item.action = list[i];
+                menu.addMenuItem(item, virtualDesktopsMenuItem);
+            }
 
-        if (actionList.length > 0) {
-            menu.addMenuItem(newSeparator(menu), virtualDesktopsMenuItem);
-        }
-
-        var actionList = backend.recentDocumentActions(launcherUrl, menu);
-
-        for (var i = 0; i < actionList.length; ++i) {
-            var item = newMenuItem(menu);
-            item.action = actionList[i];
-            menu.addMenuItem(item, virtualDesktopsMenuItem);
-        }
-
-        if (actionList.length > 0) {
-            menu.addMenuItem(newSeparator(menu), virtualDesktopsMenuItem);
-        }
+            if (list.length > 0) {
+                menu.addMenuItem(newSeparator(menu), virtualDesktopsMenuItem);
+            }
+        });
 
         // Add Media Player control actions
         var sourceName = mpris2Source.sourceNameForLauncherUrl(launcherUrl, get(atm.AppPid));
@@ -155,7 +159,11 @@ PlasmaComponents.ContextMenu {
                 });
                 menu.addMenuItem(menuItem, virtualDesktopsMenuItem);
 
-                menu.addMenuItem(newSeparator(menu), virtualDesktopsMenuItem);
+                // Technically media controls and audio streams are separate but for the user they're
+                // semantically related, don't add a separator inbetween.
+                if (!menu.visualParent.hasAudioStream) {
+                    menu.addMenuItem(newSeparator(menu), virtualDesktopsMenuItem);
+                }
 
                 // If we don't have a window associated with the player but we can quit
                 // it through MPRIS we'll offer a "Quit" option instead of "Close"
@@ -265,7 +273,7 @@ PlasmaComponents.ContextMenu {
 
                 for (var i = 0; i < virtualDesktopInfo.desktopNames.length; ++i) {
                     menuItem = menu.newMenuItem(virtualDesktopsMenu);
-                    menuItem.text = i18nc("1 = number of desktop, 2 = desktop name", "&%1 Desktop %2", i + 1, virtualDesktopInfo.desktopNames[i]);
+                    menuItem.text = i18nc("1 = number of desktop, 2 = desktop name", "&%1 %2", i + 1, virtualDesktopInfo.desktopNames[i]);
                     menuItem.checkable = true;
                     menuItem.checked = Qt.binding((function(i) {
                         return function() { return menu.visualParent && menu.get(atm.VirtualDesktop) == (i + 1) };
@@ -334,8 +342,7 @@ PlasmaComponents.ContextMenu {
                 menuItem.checked = Qt.binding(function() {
                     return menu.visualParent && menu.get(atm.Activities).length === 0;
                 });
-                menuItem.clicked.connect(function() {
-                    var checked = menuItem.checked;
+                menuItem.toggled.connect(function(checked) {
                     var newActivities = undefined; // will cast to an empty QStringList i.e all activities
                     if (!checked) {
                         newActivities = new Array(activityInfo.currentActivity);
@@ -357,9 +364,8 @@ PlasmaComponents.ContextMenu {
                             return menu.visualParent && menu.get(atm.Activities).indexOf(activityId) >= 0;
                         };
                     })(activityId));
-                    menuItem.clicked.connect((function(activityId) {
-                        return function () {
-                            var checked = menuItem.checked;
+                    menuItem.toggled.connect((function(activityId) {
+                        return function (checked) {
                             var newActivities = menu.get(atm.Activities);
                             if (checked) {
                                 newActivities = newActivities.concat(activityId);
@@ -368,7 +374,8 @@ PlasmaComponents.ContextMenu {
                                 if (index < 0) {
                                     return;
                                 }
-                                newActivities = newActivities.splice(index, 1);
+
+                                newActivities.splice(index, 1);
                             }
                             return tasksModel.requestActivities(menu.modelIndex, newActivities);
                         };
@@ -529,7 +536,9 @@ PlasmaComponents.ContextMenu {
 
         text: i18nc("Remove launcher button for application shown while it is not running", "Unpin")
 
-        onClicked: tasksModel.requestRemoveLauncher(get(atm.LauncherUrlWithoutIcon));
+        onClicked: {
+            tasksModel.requestRemoveLauncher(get(atm.LauncherUrlWithoutIcon));
+        }
     }
 
 

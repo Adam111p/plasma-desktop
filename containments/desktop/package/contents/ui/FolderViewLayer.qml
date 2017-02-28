@@ -65,11 +65,6 @@ Item {
         size: "16x16"
     }
 
-    // FIXME TODO: See https://codereview.qt-project.org/#/c/113758/
-    Folder.TextFix {
-        id: textFix
-    }
-
     Folder.MenuHelper {
         id: menuHelper
     }
@@ -137,6 +132,8 @@ Item {
             if (root.isPopup && !plasmoid.expanded) {
                 if (folderView.url != plasmoid.configuration.url) {
                     folderView.url = plasmoid.configuration.url;
+                    folderView.history = [];
+                    folderView.updateHistory();
                 }
 
                 folderView.currentIndex = -1;
@@ -186,8 +183,8 @@ Item {
         }
     }
 
-    FolderView {
-        id: folderView
+    PlasmaCore.ColorScope {
+        id: colorScope
 
         anchors.left: parent.left
         anchors.top: parent.top
@@ -195,28 +192,37 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
 
-        isRootView: true
+        colorGroup: (root.isContainment ? PlasmaCore.Theme.ComplementaryColorGroup
+            : PlasmaCore.Theme.NormalColorGroup)
 
-        url: plasmoid.configuration.url
-        locked: (plasmoid.configuration.locked || !isContainment)
-        filterMode: plasmoid.configuration.filterMode
-        filterPattern: plasmoid.configuration.filterPattern
-        filterMimeTypes: plasmoid.configuration.filterMimeTypes
+        FolderView {
+            id: folderView
 
-        flow: (plasmoid.configuration.arrangement == 0) ? GridView.FlowLeftToRight : GridView.FlowTopToBottom
-        layoutDirection: (plasmoid.configuration.alignment == 0) ? Qt.LeftToRight : Qt.RightToLeft
+            anchors.fill: parent
 
-        onSortModeChanged: {
-            plasmoid.configuration.sortMode = sortMode;
-        }
+            isRootView: true
 
-        onPositionsChanged: {
-            plasmoid.configuration.positions = folderView.positions;
-        }
+            url: plasmoid.configuration.url
+            locked: (plasmoid.configuration.locked || !isContainment)
+            filterMode: plasmoid.configuration.filterMode
+            filterPattern: plasmoid.configuration.filterPattern
+            filterMimeTypes: plasmoid.configuration.filterMimeTypes
 
-        Component.onCompleted: {
-            folderView.sortMode = plasmoid.configuration.sortMode;
-            folderView.positions = plasmoid.configuration.positions;
+            flow: (plasmoid.configuration.arrangement == 0) ? GridView.FlowLeftToRight : GridView.FlowTopToBottom
+            layoutDirection: (plasmoid.configuration.alignment == 0) ? Qt.LeftToRight : Qt.RightToLeft
+
+            onSortModeChanged: {
+                plasmoid.configuration.sortMode = sortMode;
+            }
+
+            onPositionsChanged: {
+                plasmoid.configuration.positions = folderView.positions;
+            }
+
+            Component.onCompleted: {
+                folderView.sortMode = plasmoid.configuration.sortMode;
+                folderView.positions = plasmoid.configuration.positions;
+            }
         }
     }
 

@@ -76,6 +76,7 @@ AppsModel::AppsModel(const QList<AbstractEntry *> entryList, bool deleteEntriesO
                 && static_cast<const AppEntry *>(entry)->service()->storageId()
                 == static_cast<const AppEntry *>(suggestedEntry)->service()->storageId()) {
                 found = true;
+                break;
             }
         }
 
@@ -568,6 +569,7 @@ void AppsModel::processServiceGroup(KServiceGroup::Ptr group)
                 if (entry->type() == AbstractEntry::RunnableType
                     && static_cast<const AppEntry *>(entry)->service()->storageId() == service->storageId()) {
                     found = true;
+                    break;
                 }
             }
 

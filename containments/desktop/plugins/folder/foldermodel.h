@@ -50,6 +50,10 @@ class KFileItemActions;
 class KJob;
 class KNewFileMenu;
 
+namespace KIO {
+    class DropJob;
+}
+
 class DirLister : public KDirLister
 {
     Q_OBJECT
@@ -73,6 +77,7 @@ class FolderModel : public QSortFilterProxyModel
     Q_PROPERTY(QString iconName READ iconName NOTIFY iconNameChanged)
     Q_PROPERTY(QUrl resolvedUrl READ resolvedUrl NOTIFY resolvedUrlChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorStringChanged)
+    Q_PROPERTY(bool dragging READ dragging NOTIFY draggingChanged)
     Q_PROPERTY(bool usedByContainment READ usedByContainment WRITE setUsedByContainment NOTIFY usedByContainmentChanged)
     Q_PROPERTY(bool locked READ locked WRITE setLocked NOTIFY lockedChanged)
     Q_PROPERTY(int sortMode READ sortMode WRITE setSortMode NOTIFY sortModeChanged)
@@ -122,6 +127,8 @@ class FolderModel : public QSortFilterProxyModel
         Q_INVOKABLE QUrl resolve(const QString& url);
 
         QString errorString() const;
+
+        bool dragging() const;
 
         bool usedByContainment() const;
         void setUsedByContainment(bool used);
@@ -209,9 +216,12 @@ class FolderModel : public QSortFilterProxyModel
 
     Q_SIGNALS:
         void urlChanged() const;
+        void listingStarted() const;
+        void listingCompleted() const;
         void iconNameChanged() const;
         void resolvedUrlChanged() const;
         void errorStringChanged() const;
+        void draggingChanged() const;
         void usedByContainmentChanged() const;
         void lockedChanged() const;
         void sortModeChanged() const;
@@ -226,6 +236,7 @@ class FolderModel : public QSortFilterProxyModel
         void filterMimeTypesChanged() const;
         void requestRename() const;
         void move(int x, int y, QList<QUrl> urls);
+        void popupMenuAboutToShow(KIO::DropJob *dropJob, QMimeData *mimeData, int x, int y);
 
     protected:
         bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const;
@@ -268,6 +279,7 @@ class FolderModel : public QSortFilterProxyModel
         QHash<int, DragImage *> m_dragImages;
         QPoint m_dragHotSpotScrollOffset;
         bool m_dragInProgress;
+        bool m_urlChangedWhileDragging;
         QPointer<KFilePreviewGenerator> m_previewGenerator;
         QPointer<KAbstractViewAdapter> m_viewAdapter;
         KActionCollection m_actionCollection;

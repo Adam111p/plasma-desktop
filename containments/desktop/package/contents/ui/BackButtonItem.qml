@@ -31,11 +31,22 @@ PlasmaCore.FrameSvgItem {
     width: gridView.cellWidth
     height: visible ? gridView.cellHeight : 0
 
-    visible: dir.resolvedUrl != dir.resolve(plasmoid.configuration.url)
+    visible: history.length != 0
 
     property bool ignoreClick: false
+    property bool containsDrag: false
 
     imagePath: "widgets/viewitem"
+
+    function handleDragMove() {
+        containsDrag = true;
+        hoverActivateTimer.restart();
+    }
+
+    function endDragMove() {
+        containsDrag = false;
+        hoverActivateTimer.stop();
+    }
 
     MouseArea {
         id: mouseArea
@@ -52,7 +63,7 @@ PlasmaCore.FrameSvgItem {
         onPressed: {
             if (mouse.buttons & Qt.BackButton) {
                 if (root.isPopup && dir.resolvedUrl != dir.resolve(plasmoid.configuration.url)) {
-                    dir.up();
+                    doBack();
                     ignoreClick = true;
                 }
             }
@@ -64,7 +75,7 @@ PlasmaCore.FrameSvgItem {
                 return;
             }
 
-            dir.up();
+            doBack();
         }
     }
 
@@ -80,7 +91,7 @@ PlasmaCore.FrameSvgItem {
         width: gridView.iconSize
         height: gridView.iconSize
 
-        source: "arrow-up"
+        source: "arrow-left"
     }
 
     PlasmaComponents.Label {
@@ -102,13 +113,21 @@ PlasmaCore.FrameSvgItem {
         wrapMode: Text.Wrap
         elide: Text.ElideRight
 
-        text: i18n("Up")
+        text: i18n("Back")
+    }
+
+    Timer {
+        id: hoverActivateTimer
+
+        interval: root.hoverActivateDelay
+
+        onTriggered: doBack()
     }
 
     states: [
         State {
             name: "hover"
-            when: mouseArea.containsMouse
+            when: mouseArea.containsMouse || containsDrag
 
             PropertyChanges {
                 target: upButton

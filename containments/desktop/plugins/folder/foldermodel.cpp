@@ -62,6 +62,8 @@
 #include <KShell>
 #include <kio_version.h>
 
+#include <KCoreDirLister>
+#include <KDirLister>
 #include <KDesktopFile>
 #include <KDirModel>
 #include <KIO/CopyJob>
@@ -94,6 +96,7 @@ void DirLister::handleError(KIO::Job *job)
 FolderModel::FolderModel(QObject *parent) : QSortFilterProxyModel(parent),
     m_dirWatch(nullptr),
     m_dragInProgress(false),
+    m_urlChangedWhileDragging(false),
     m_previewGenerator(0),
     m_viewAdapter(0),
     m_actionCollection(this),
@@ -109,11 +112,16 @@ FolderModel::FolderModel(QObject *parent) : QSortFilterProxyModel(parent),
     m_filterMode(NoFilter),
     m_filterPatternMatchAll(true)
 {
+    //needed to pass the job around with qml
+    qmlRegisterType<KIO::DropJob>();
     DirLister *dirLister = new DirLister(this);
     dirLister->setDelayedMimeTypes(true);
     dirLister->setAutoErrorHandlingEnabled(false, 0);
     connect(dirLister, &DirLister::error, this, &FolderModel::dirListFailed);
     connect(dirLister, &KCoreDirLister::itemsDeleted, this, &FolderModel::evictFromIsDirCache);
+    connect(dirLister, &KCoreDirLister::started, this, &FolderModel::listingStarted);
+    void (KCoreDirLister::*myCompletedSignal)() = &KCoreDirLister::completed;
+    QObject::connect(dirLister, myCompletedSignal, this, &FolderModel::listingCompleted);
 
     m_dirModel = new KDirModel(this);
     m_dirModel->setDirLister(dirLister);
@@ -174,7 +182,6 @@ void FolderModel::setUrl(const QString& url)
 
     if (url == m_url) {
         m_dirModel->dirLister()->updateDirectory(resolvedUrl);
-
         return;
     }
 
@@ -183,6 +190,7 @@ void FolderModel::setUrl(const QString& url)
     m_isDirCache.clear();
     m_dirModel->dirLister()->openUrl(resolvedUrl);
     clearDragImages();
+    m_dragIndexes.clear();
     endResetModel();
 
     emit urlChanged();
@@ -195,11 +203,15 @@ void FolderModel::setUrl(const QString& url)
         delete m_dirWatch;
     }
 
-    if (resolvedUrl.isLocalFile()) {
+    if (resolvedUrl.isValid()) {
         m_dirWatch = new KDirWatch(this);
         connect(m_dirWatch, &KDirWatch::created, this, &FolderModel::iconNameChanged);
         connect(m_dirWatch, &KDirWatch::dirty, this, &FolderModel::iconNameChanged);
         m_dirWatch->addFile(resolvedUrl.toLocalFile() + QLatin1String("/.directory"));
+    }
+
+    if (m_dragInProgress) {
+        m_urlChangedWhileDragging = true;
     }
 
     emit iconNameChanged();
@@ -237,6 +249,11 @@ QString FolderModel::iconName() const
 QString FolderModel::errorString() const
 {
     return m_errorString;
+}
+
+bool FolderModel::dragging() const
+{
+    return m_dragInProgress;
 }
 
 bool FolderModel::usedByContainment() const
@@ -492,10 +509,20 @@ void FolderModel::cd(int row)
         return;
     }
 
-    KFileItem item = itemForIndex(index(row, 0));
+    const QModelIndex idx = index(row, 0);
+    bool isDir = data(idx, IsDirRole).toBool();
 
-    if (item.isDir()) {
-        setUrl(item.url().toString());
+    if (isDir) {
+        const KFileItem  item = itemForIndex(idx);
+        if (m_parseDesktopFiles && item.isDesktopFile()) {
+            const KDesktopFile file(item.targetUrl().path());
+            if (file.readType() == QLatin1String("Link")) {
+                setUrl(file.readUrl());
+            }
+        }
+        else {
+            setUrl(item.url().toString());
+        }
     }
 }
 
@@ -514,7 +541,12 @@ void FolderModel::run(int row)
         url.setScheme(QStringLiteral("file"));
     }
 
-    new KRun(url, 0);
+    KRun *run = new KRun(url, 0);
+    // On desktop:/ we want to be able to run .desktop files right away,
+    // otherwise ask for security reasons. We also don't use the targetUrl()
+    // from above since we don't want the resolved /home/foo/Desktop URL.
+    run->setShowScriptExecutionPrompt(item.url().scheme() != QLatin1String("desktop")
+                                   || item.url().adjusted(QUrl::RemoveFilename).path() != QLatin1String("/"));
 }
 
 void FolderModel::runSelected()
@@ -523,14 +555,22 @@ void FolderModel::runSelected()
         return;
     }
 
-    bool unarySelection = (m_selectionModel->selectedIndexes().count() == 1);
+    if (m_selectionModel->selectedIndexes().count() == 1) {
+        run(m_selectionModel->selectedIndexes().constFirst().row());
+        return;
+    }
+
+    KFileItemActions fileItemActions(this);
+    KFileItemList items;
 
     foreach (const QModelIndex &index, m_selectionModel->selectedIndexes()) {
         // Skip over directories.
-        if (!unarySelection && !index.data(IsDirRole).toBool()) {
-            run(index.row());
+        if (!index.data(IsDirRole).toBool()) {
+            items << itemForIndex(index);
         }
     }
+
+    fileItemActions.runPreferredApplications(items, QString());
 }
 
 void FolderModel::rename(int row, const QString& name)
@@ -744,6 +784,14 @@ void FolderModel::addDragImage(QDrag *drag, int x, int y)
 
 void FolderModel::dragSelected(int x, int y)
 {
+    if (m_dragInProgress) {
+        return;
+    }
+
+    m_dragInProgress = true;
+    emit draggingChanged();
+    m_urlChangedWhileDragging = false;
+
     // Avoid starting a drag synchronously in a mouse handler or interferes with
     // child event filtering in parent items (and thus e.g. press-and-hold hand-
     // ling in a containment).
@@ -755,6 +803,8 @@ void FolderModel::dragSelected(int x, int y)
 void FolderModel::dragSelectedInternal(int x, int y)
 {
     if (!m_viewAdapter || !m_selectionModel->hasSelection()) {
+        m_dragInProgress = false;
+        emit draggingChanged();
         return;
     }
 
@@ -780,17 +830,28 @@ void FolderModel::dragSelectedInternal(int x, int y)
 
     drag->setMimeData(m_dirModel->mimeData(sourceDragIndexes));
 
+    // Due to spring-loading (aka auto-expand), the URL might change
+    // while the drag is in-flight - in that case we don't want to
+    // unnecessarily emit dataChanged() for (possibly invalid) indices
+    // after it ends.
+    const QUrl currentUrl(m_dirModel->dirLister()->url());
+
     item->grabMouse();
-    m_dragInProgress = true;
     drag->exec(supportedDragActions());
-    m_dragInProgress = false;
+
     item->ungrabMouse();
 
-    const QModelIndex first(m_dragIndexes.first());
-    const QModelIndex last(m_dragIndexes.last());
-    m_dragIndexes.clear();
-    // TODO: Optimize to emit contiguous groups.
-    emit dataChanged(first, last, QVector<int>() << BlankRole);
+    m_dragInProgress = false;
+    emit draggingChanged();
+    m_urlChangedWhileDragging = false;
+
+    if (m_dirModel->dirLister()->url() == currentUrl) {
+        const QModelIndex first(m_dragIndexes.first());
+        const QModelIndex last(m_dragIndexes.last());
+        m_dragIndexes.clear();
+        // TODO: Optimize to emit contiguous groups.
+        emit dataChanged(first, last, QVector<int>() << BlankRole);
+    }
 }
 
 void FolderModel::drop(QQuickItem *target, QObject* dropEvent, int row)
@@ -801,7 +862,7 @@ void FolderModel::drop(QQuickItem *target, QObject* dropEvent, int row)
         return;
     }
 
-    if (m_dragInProgress && row == -1) {
+    if (m_dragInProgress && row == -1 && !m_urlChangedWhileDragging) {
         if (m_locked || mimeData->urls().isEmpty()) {
             return;
         }
@@ -822,8 +883,28 @@ void FolderModel::drop(QQuickItem *target, QObject* dropEvent, int row)
          item = itemForIndex(idx);
     }
 
-    if (item.isNull() &&
-        mimeData->hasFormat(QStringLiteral("application/x-kde-ark-dndextract-service")) &&
+    QUrl dropTargetUrl;
+
+    // So we get to run mostLocalUrl() over the current URL.
+    if (item.isNull()) {
+        item = m_dirModel->dirLister()->rootItem();
+    }
+
+    if (item.isNull()) {
+        dropTargetUrl = m_dirModel->dirLister()->url();
+    } else if (m_parseDesktopFiles && item.isDesktopFile()) {
+        const KDesktopFile file(item.targetUrl().path());
+
+        if (file.readType() == QLatin1String("Link")) {
+            dropTargetUrl = QUrl(file.readUrl());
+        } else {
+            dropTargetUrl = item.mostLocalUrl();
+        }
+    } else {
+        dropTargetUrl = item.mostLocalUrl();
+    }
+
+    if (mimeData->hasFormat(QStringLiteral("application/x-kde-ark-dndextract-service")) &&
         mimeData->hasFormat(QStringLiteral("application/x-kde-ark-dndextract-path"))) {
         const QString remoteDBusClient = mimeData->data(QStringLiteral("application/x-kde-ark-dndextract-service"));
         const QString remoteDBusPath = mimeData->data(QStringLiteral("application/x-kde-ark-dndextract-path"));
@@ -832,7 +913,7 @@ void FolderModel::drop(QQuickItem *target, QObject* dropEvent, int row)
             QDBusMessage::createMethodCall(remoteDBusClient, remoteDBusPath,
                                             QStringLiteral("org.kde.ark.DndExtract"),
                                             QStringLiteral("extractSelectedFilesTo"));
-        message.setArguments(QVariantList() << m_dirModel->dirLister()->url().adjusted(QUrl::PreferLocalFile).toString());
+        message.setArguments({dropTargetUrl.toDisplayString(QUrl::PreferLocalFile)});
 
         QDBusConnection::sessionBus().call(message);
 
@@ -858,24 +939,14 @@ void FolderModel::drop(QQuickItem *target, QObject* dropEvent, int row)
     QDropEvent ev(pos, possibleActions, mimeData, buttons, modifiers);
     ev.setDropAction(proposedAction);
 
-    QUrl dropTargetUrl;
-
-    if (item.isNull()) {
-        dropTargetUrl = m_dirModel->dirLister()->url();
-    } else if (m_parseDesktopFiles && item.isDesktopFile()) {
-        const KDesktopFile file(item.targetUrl().path());
-
-        if (file.readType() == QLatin1String("Link")) {
-            dropTargetUrl = QUrl(file.readUrl());
-        } else {
-            dropTargetUrl = item.mostLocalUrl();
-        }
-    } else {
-        dropTargetUrl = item.mostLocalUrl();
-    }
-
     KIO::DropJob *dropJob = KIO::drop(&ev, dropTargetUrl);
     dropJob->ui()->setAutoErrorHandlingEnabled(true);
+    const int x = dropEvent->property("x").toInt();
+    const int y = dropEvent->property("y").toInt();
+
+    connect(dropJob, static_cast<void(KIO::DropJob::*)(const KFileItemListProperties &)>(&KIO::DropJob::popupMenuAboutToShow), this, [this, mimeData, x, y, dropJob](const KFileItemListProperties &) {
+        emit popupMenuAboutToShow(dropJob, mimeData, x, y);
+    });
 }
 
 void FolderModel::dropCwd(QObject* dropEvent)

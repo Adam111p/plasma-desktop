@@ -20,7 +20,7 @@
 *   51 Franklin Street, Fifth Floor, Boston, MA  2.010-1301, USA.
 */
 
-import QtQuick 2.7
+import QtQuick 2.6
 import QtQuick.Layouts 1.1
 import QtGraphicalEffects 1.0
 import QtQml.Models 2.2
@@ -89,34 +89,34 @@ Column {
         }
         // all textlabels
         Column {
-            spacing: 0.75 * units.smallSpacing
-            PlasmaComponents.Label {
+            PlasmaExtras.Heading {
+                level: 3
                 width: isWin ? textWidth : undefined
-                height: theme.mSize(theme.defaultFont).height
-                font.pointSize: -1
-                font.pixelSize: height
+                height: undefined
+                maximumLineCount: 1
                 elide: Text.ElideRight
                 text: appName
                 opacity: flatIndex == 0
                 textFormat: Text.PlainText
+                visible: text !== ""
             }
             // window title
-            PlasmaComponents.Label {
+            PlasmaExtras.Heading {
+                level: 5
                 width: isWin ? textWidth : undefined
-                height: 0.75 * theme.mSize(theme.defaultFont).height
-                font.pointSize: -1
-                font.pixelSize: height
+                height: undefined
+                maximumLineCount: 1
                 elide: Text.ElideRight
                 text: generateTitle()
                 textFormat: Text.PlainText
                 opacity: 0.75
             }
             // subtext
-            PlasmaComponents.Label {
+            PlasmaExtras.Heading {
+                level: 6
                 width: isWin ? textWidth : undefined
-                height: 0.6 * theme.mSize(theme.defaultFont).height
-                font.pointSize: -1
-                font.pixelSize: height
+                height: undefined
+                maximumLineCount: 1
                 elide: Text.ElideRight
                 text: isWin ? generateSubText() : ""
                 textFormat: Text.PlainText
@@ -257,6 +257,7 @@ Column {
                         anchors.bottom: parent.bottom
                         width: parent.width
                         height: playerControlsRow.height
+                        color: theme.backgroundColor
                         opacity: 0.8
                     }
                 }
@@ -457,14 +458,6 @@ Column {
             } else if (activityNames.length > 0) {
                 subTextEntries.push(i18nc("Which activities a window is currently on",
                     "Available on %1", activityNames.join(", ")));
-            }
-        }
-
-        if (parentTask.playingAudio) {
-            if (parentTask.muted) {
-                subTextEntries.push(i18nc("The application this window belongs to is muted", "Currently Muted"));
-            } else {
-                subTextEntries.push(i18nc("The application this window belongs to is playing audio", "Currently Playing Audio"));
             }
         }
 

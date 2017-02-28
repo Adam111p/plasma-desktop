@@ -31,7 +31,7 @@ import "../code/tools.js" as TaskTools
 MouseArea {
     id: task
 
-    width: groupDialog.mainItem.width
+    width: groupDialog.contentWidth
     height: Math.max(theme.mSize(theme.defaultFont).height, units.iconSizes.medium) + LayoutManager.verticalMargins()
 
     visible: false
@@ -42,12 +42,13 @@ MouseArea {
     readonly property var m: model
 
     readonly property int pid: model.AppPid
+    readonly property string appName: model.AppName
     property int itemIndex: index
     property bool inPopup: false
     property bool isWindow: model.IsWindow === true
     property int childCount: model.ChildCount != undefined ? model.ChildCount : 0
     property int previousChildCount: 0
-    property alias textWidth: label.implicitWidth
+    property alias labelText: label.text
     property bool pressed: false
     property int pressX: -1
     property int pressY: -1
@@ -75,6 +76,7 @@ MouseArea {
     acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MidButton
 
     onPidChanged: updateAudioStreams()
+    onAppNameChanged: updateAudioStreams()
 
     onIsWindowChanged: {
         if (isWindow) {
@@ -83,6 +85,10 @@ MouseArea {
     }
 
     onChildCountChanged: {
+        if (containsMouse) {
+            groupDialog.activeTask = null;
+        }
+
         if (childCount > previousChildCount) {
             tasksModel.requestPublishDelegateGeometry(modelIndex(), backend.globalRect(task), task);
         }
@@ -120,7 +126,13 @@ MouseArea {
             pressX = mouse.x;
             pressY = mouse.y;
         } else if (mouse.button == Qt.RightButton) {
-            tasks.createContextMenu(task, modelIndex()).show();
+            // When we're a launcher, there's no window controls, so we can show all
+            // places without the menu getting super huge.
+            if (model.IsLauncher === true) {
+                showContextMenu({showAllPlaces: true})
+            } else {
+                showContextMenu();
+            }
         }
     }
 
@@ -140,6 +152,8 @@ MouseArea {
                     hideToolTipTemporarily();
                 }
             }
+
+            backend.cancelHighlightWindows();
         }
 
         pressed = false;
@@ -161,7 +175,7 @@ MouseArea {
     }
 
     onWheel: {
-        if (plasmoid.configuration.wheelEnabled) {
+        if (plasmoid.configuration.wheelEnabled && (!inPopup || !groupDialog.overflowing)) {
             wheelDelta = TaskTools.wheelActivateNextPrevTask(task, wheelDelta, wheel.angleDelta.y);
         } else {
             wheel.accepted = false;
@@ -194,19 +208,31 @@ MouseArea {
             : tasksModel.makeModelIndex(index));
     }
 
-    function updateAudioStreams() {
-        if (!pid) {
-            task.audioStreams = [];
-            return;
-        }
+    function showContextMenu(args) {
+        tasks.createContextMenu(task, modelIndex(), args).show();
+    }
 
+    function updateAudioStreams() {
         var pa = pulseAudio.item;
         if (!pa) {
             task.audioStreams = [];
             return;
         }
 
-        task.audioStreams = pa.streamsForPid(pid);
+        var streams = pa.streamsForPid(task.pid);
+        if (streams.length) {
+            pa.registerPidMatch(task.appName);
+        } else {
+            // We only want to fall back to appName matching if we never managed to map
+            // a PID to an audio stream window. Otherwise if you have two instances of
+            // an application, one playing and the other not, it will look up appName
+            // for the non-playing instance and erroneously show an indicator on both.
+            if (!pa.hasPidMatch(task.appName)) {
+                streams = pa.streamsForAppName(task.appName);
+            }
+        }
+
+        task.audioStreams = streams;
     }
 
     function toggleMuted() {
@@ -434,14 +460,13 @@ MouseArea {
         readonly property bool shown: item && item.visible
 
         source: "AudioStream.qml"
-        width: Math.min(units.iconSizes.medium, iconBox.width)
-        height: Math.min(units.iconSizes.medium, iconBox.height)
+        width: units.roundToIconSize(Math.min(Math.min(iconBox.width, iconBox.height), units.iconSizes.smallMedium))
+        height: width
 
         anchors {
             right: parent.right
             rightMargin: iconBox.adjustMargin(true, parent.width, taskFrame.margins.right)
-            top: parent.top
-            topMargin: iconBox.adjustMargin(false, parent.height, taskFrame.margins.top)
+            verticalCenter: parent.verticalCenter
         }
     }
 
@@ -449,7 +474,7 @@ MouseArea {
         id: label
 
         visible: (inPopup || !iconsOnly && model.IsLauncher !== true
-            && (parent.width - iconBox.height - units.smallSpacing) >= (theme.mSize(theme.defaultFont).width * 7))
+            && (parent.width - iconBox.height - units.smallSpacing) >= (theme.mSize(theme.defaultFont).width * LayoutManager.minimumMColumns()))
 
         anchors {
             fill: parent
@@ -464,6 +489,7 @@ MouseArea {
         elide: Text.ElideRight
         textFormat: Text.PlainText
         verticalAlignment: Text.AlignVCenter
+        maximumLineCount: plasmoid.configuration.maxTextLines || undefined
     }
 
     states: [
@@ -478,7 +504,8 @@ MouseArea {
         },
         State {
             name: "hovered"
-            when: task.highlighted || (contextMenu.status == PlasmaComponents.DialogStatus.Open && contextMenu.visualParent == task)
+            when: ((task.highlighted && frame.hasElementPrefix("hover") && plasmoid.configuration.taskHoverEffect)
+                || (contextMenu.status == PlasmaComponents.DialogStatus.Open && contextMenu.visualParent == task))
 
             PropertyChanges {
                 target: frame

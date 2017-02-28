@@ -41,6 +41,7 @@ class Backend : public QObject
 
     Q_PROPERTY(QQuickItem* taskManagerItem READ taskManagerItem WRITE setTaskManagerItem NOTIFY taskManagerItemChanged)
     Q_PROPERTY(QQuickItem* toolTipItem READ toolTipItem WRITE setToolTipItem NOTIFY toolTipItemChanged)
+    Q_PROPERTY(QQuickWindow* groupDialog READ groupDialog WRITE setGroupDialog NOTIFY groupDialogChanged)
     Q_PROPERTY(bool highlightWindows READ highlightWindows WRITE setHighlightWindows NOTIFY highlightWindowsChanged)
 
     public:
@@ -62,10 +63,14 @@ class Backend : public QObject
         QQuickItem *toolTipItem() const;
         void setToolTipItem(QQuickItem *item);
 
+        QQuickWindow *groupDialog() const;
+        void setGroupDialog(QQuickWindow *dialog);
+
         bool highlightWindows() const;
         void setHighlightWindows(bool highlight);
 
         Q_INVOKABLE QVariantList jumpListActions(const QUrl &launcherUrl, QObject *parent);
+        Q_INVOKABLE QVariantList placesActions(const QUrl &launcherUrl, bool showAllPlaces, QObject *parent);
         Q_INVOKABLE QVariantList recentDocumentActions(const QUrl &launcherUrl, QObject *parent);
         Q_INVOKABLE void setActionGroup(QAction *action) const;
 
@@ -88,8 +93,11 @@ class Backend : public QObject
     Q_SIGNALS:
         void taskManagerItemChanged() const;
         void toolTipItemChanged() const;
+        void groupDialogChanged() const;
         void highlightWindowsChanged() const;
         void addLauncher(const QUrl &url) const;
+
+        void showAllPlaces();
 
     private Q_SLOTS:
         void toolTipWindowChanged(QQuickWindow *window);
@@ -101,6 +109,7 @@ class Backend : public QObject
 
         QQuickItem *m_taskManagerItem;
         QQuickItem *m_toolTipItem;
+        QQuickWindow *m_groupDialog;
         WId m_panelWinId;
         bool m_highlightWindows;
         QList<WId> m_windowsToHighlight;

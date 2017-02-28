@@ -22,6 +22,7 @@
 #include <KConfigGroup>
 #include <KDesktopFile>
 #include <KFileItem>
+#include <KFilePlacesModel>
 #include <KLocalizedString>
 #include <KRun>
 #include <KService>
@@ -32,6 +33,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QJsonArray>
+#include <QScopedPointer>
 #include <QQuickItem>
 #include <QQuickWindow>
 
@@ -85,6 +87,20 @@ void Backend::setToolTipItem(QQuickItem *item)
         connect(item, SIGNAL(windowChanged(QQuickWindow*)), this, SLOT(toolTipWindowChanged(QQuickWindow*)));
 
         emit toolTipItemChanged();
+    }
+}
+
+QQuickWindow *Backend::groupDialog() const
+{
+    return m_groupDialog;
+}
+
+void Backend::setGroupDialog(QQuickWindow *dialog)
+{
+    if (dialog != m_groupDialog) {
+        m_groupDialog = dialog;
+
+        emit groupDialogChanged();
     }
 }
 
@@ -152,6 +168,67 @@ QVariantList Backend::jumpListActions(const QUrl &launcherUrl, QObject *parent)
         connect(action, &QAction::triggered, this, &Backend::handleJumpListAction);
 
         actions << QVariant::fromValue<QAction *>(action);
+    }
+
+    return actions;
+}
+
+QVariantList Backend::placesActions(const QUrl &launcherUrl, bool showAllPlaces, QObject *parent)
+{
+    QVariantList actions;
+
+    if (!parent || !launcherUrl.isValid() || !launcherUrl.isLocalFile()
+        || !KDesktopFile::isDesktopFile(launcherUrl.toLocalFile())) {
+        return actions;
+    }
+
+    KDesktopFile desktopFile(launcherUrl.toLocalFile());
+
+    // Since we can't have dynamic jump list actions, at least add the user's "Places" for file managers.
+    const QStringList &categories = desktopFile.desktopGroup().readXdgListEntry(QStringLiteral("Categories"));
+    if (!categories.contains(QLatin1String("FileManager"))) {
+        return actions;
+    }
+
+    QScopedPointer<KFilePlacesModel> placesModel(new KFilePlacesModel());
+    for (int i = 0; i < placesModel->rowCount(); ++i) {
+        QModelIndex idx = placesModel->index(i, 0);
+
+        if (placesModel->data(idx, KFilePlacesModel::HiddenRole).toBool()) {
+            continue;
+        }
+
+        const QString &title = placesModel->data(idx, Qt::DisplayRole).toString();
+        const QIcon &icon = placesModel->data(idx, Qt::DecorationRole).value<QIcon>();
+        const QUrl &url = placesModel->data(idx, KFilePlacesModel::UrlRole).toUrl();
+
+        QAction *action = new QAction(icon, title, parent);
+
+        connect(action, &QAction::triggered, this, [this, action, url, launcherUrl] {
+            KService::Ptr service = KService::serviceByDesktopPath(launcherUrl.toLocalFile());
+            if (!service) {
+                return;
+            }
+
+            KRun::runService(*service, {url}, QApplication::activeWindow());
+        });
+
+        actions << QVariant::fromValue(action);
+    }
+
+    // There is nothing more frustrating than having a "More" entry that ends up showing just one or two
+    // additional entries. Therefore we truncate to max. 5 entries only if there are more than 7 in total.
+    if (!showAllPlaces && actions.count() > 7) {
+        const int totalActionCount = actions.count();
+
+        while (actions.count() > 5) {
+            actions.removeLast();
+        }
+
+        QAction *action = new QAction(parent);
+        action->setText(i18ncp("Show all user Places", "%1 more Place", "%1 more Places", totalActionCount - actions.count()));
+        connect(action, &QAction::triggered, this, &Backend::showAllPlaces);
+        actions << QVariant::fromValue(action);
     }
 
     return actions;
@@ -324,6 +401,10 @@ bool Backend::canPresentWindows() const
 
 void Backend::presentWindows(const QVariant &_winIds)
 {
+    if (!m_taskManagerItem || !m_taskManagerItem->window()) {
+        return;
+    }
+
     QList<WId> winIds;
 
     const QVariantList &_winIdsList = _winIds.toList();
@@ -425,6 +506,10 @@ void Backend::updateWindowHighlight()
 
     if (windows.count() && m_toolTipItem && m_toolTipItem->window()) {
         windows.append(m_toolTipItem->window()->winId());
+    }
+
+    if (windows.count() && m_groupDialog) {
+        windows.append(m_groupDialog->winId());
     }
 
     KWindowEffects::highlightWindows(m_panelWinId, windows);

@@ -34,6 +34,7 @@ Item {
     property bool moved: false
 
     property alias hoveredItem: dropHandler.hoveredItem
+    property alias handleWheelEvents: wheelHandler.active
 
     Timer {
         id: ignoreItemTimer
@@ -68,14 +69,9 @@ Item {
 
         //ignore anything that is neither internal to TaskManager or a URL list
         onDragEnter: {
-            if (event.mimeData.formats.indexOf("application/x-orgkdeplasmataskmanager_taskbuttonitem") >= 0) {
-                return;
+            if (event.mimeData.formats.indexOf("text/x-plasmoidservicename") >= 0) {
+                event.ignore();
             }
-
-            if (event.mimeData.hasUrls) {
-                return;
-            }
-            event.ignore();
         }
 
         onDragMove: {
@@ -128,6 +124,13 @@ Item {
         onDrop: {
             // Reject internal drops.
             if (event.mimeData.formats.indexOf("application/x-orgkdeplasmataskmanager_taskbuttonitem") >= 0) {
+                event.ignore();
+                return;
+            }
+
+            // Reject plasmoid drops.
+            if (event.mimeData.formats.indexOf("text/x-plasmoidservicename") >= 0) {
+                event.ignore();
                 return;
             }
 
@@ -135,7 +138,6 @@ Item {
                 parent.urlsDropped(event.mimeData.urls);
                 return;
             }
-            event.ignore();
         }
 
         Timer {
@@ -159,9 +161,20 @@ Item {
         id: wheelHandler
 
         anchors.fill: parent
-        property int wheelDelta: 0;
-        enabled: plasmoid.configuration.wheelEnabled
 
-        onWheel: wheelDelta = TaskTools.wheelActivateNextPrevTask(null, wheelDelta, wheel.angleDelta.y);
+        enabled: active && plasmoid.configuration.wheelEnabled
+
+        property bool active: true
+        property int wheelDelta: 0;
+
+
+        onWheel: {
+            if (!active) {
+                wheel.accepted = false;
+                return;
+            }
+
+            wheelDelta = TaskTools.wheelActivateNextPrevTask(null, wheelDelta, wheel.angleDelta.y);
+        }
     }
 }

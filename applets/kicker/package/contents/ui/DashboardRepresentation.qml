@@ -810,6 +810,12 @@ Kicker.DashboardWindow {
                                 }
                             }
 
+                            onClicked: {
+                                if (mouse.button == Qt.LeftButton) {
+                                    updateCurrentItem();
+                                }
+                            }
+
                             onAboutToShowActionMenu: {
                                 var actionList = hasActionList ? model.actionList : [];
                                 Tools.fillActionMenu(actionMenu, actionList, ListView.view.model.favoritesModel, model.favoriteId);
@@ -911,6 +917,9 @@ Kicker.DashboardWindow {
                                 if (tabBar.activeTab == 1) {
                                     root.widgetExplorer.widgetsModel.filterQuery = currentItem.m.filterData;
                                     root.widgetExplorer.widgetsModel.filterType = currentItem.m.filterType;
+
+                                    allApps = false;
+                                    funnelModel.sourceModel = model;
 
                                     return;
                                 }
