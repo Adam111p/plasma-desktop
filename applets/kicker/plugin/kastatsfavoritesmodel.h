@@ -57,7 +57,7 @@ class KAStatsFavoritesModel : public ForwardingModel
 
         QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const;
 
-        // int rowCount(const QModelIndex &parent = QModelIndex()) const;
+        int rowCount(const QModelIndex &parent = QModelIndex()) const;
 
         Q_INVOKABLE bool trigger(int row, const QString &actionId, const QVariant &argument);
 
@@ -116,6 +116,9 @@ class KAStatsFavoritesModel : public ForwardingModel
         int m_maxFavorites;
 
         int m_dropPlaceholderIndex;
+        mutable int m_whereTheItemIsBeingDropped;
+        QString m_whichIdIsBeingDropped;
+
         KActivities::Stats::ResultModel *m_sourceModel;
         KActivities::Consumer *m_activities;
         mutable QList<QUrl> m_invalidUrls;

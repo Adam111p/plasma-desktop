@@ -26,6 +26,7 @@
 
 #include <QDebug>
 #include <QFileInfo>
+#include <QTimer>
 
 #include <KLocalizedString>
 #include <KConfigGroup>
@@ -45,6 +46,7 @@ KAStatsFavoritesModel::KAStatsFavoritesModel(QObject *parent) : ForwardingModel(
 , m_enabled(true)
 , m_maxFavorites(-1)
 , m_dropPlaceholderIndex(-1)
+, m_whereTheItemIsBeingDropped(-1)
 , m_sourceModel(nullptr)
 , m_activities(new KActivities::Consumer(this))
 , m_config("TESTTEST")
@@ -61,11 +63,26 @@ QString KAStatsFavoritesModel::description() const
     return i18n("Favorites");
 }
 
-QVariant KAStatsFavoritesModel::data(const QModelIndex& index, int role) const
+QVariant KAStatsFavoritesModel::data(const QModelIndex& _index, int role) const
 {
-    if (!index.isValid() || index.row() >= rowCount()) {
+    if (!_index.isValid() || _index.row() >= rowCount()) {
         return QVariant();
     }
+
+    if (_index.row() == dropPlaceholderIndex()) {
+        if (role == Kicker::IsDropPlaceholderRole) {
+            return true;
+        } else {
+            return QVariant();
+        }
+    }
+
+    const int requestedRow = _index.row();
+
+    const QModelIndex index =
+        dropPlaceholderIndex() != -1 && requestedRow > dropPlaceholderIndex()
+            ? _index.sibling(requestedRow - 1, 0)
+            : _index;
 
     const QString id =
         sourceModel()->data(index, ResultModel::ResourceRole).toString();
@@ -73,8 +90,29 @@ QVariant KAStatsFavoritesModel::data(const QModelIndex& index, int role) const
     // const casts are bad, but we can not achieve this
     // with the standard 'mutable' members for lazy evaluation,
     // at least, not with the current design of the library
-    const auto *entry =
-        const_cast<KAStatsFavoritesModel*>(this)->favoriteFromId(id);
+    const auto _this = const_cast<KAStatsFavoritesModel*>(this);
+
+    if (m_whereTheItemIsBeingDropped != -1) {
+        // If we are in the process of dropping an item, we need to wait
+        // for it to get here. When it does, request it to be moved
+        // to its desired location. We can not do it in a better way
+        // because the model might be reset in the mean time
+        qDebug() << "Waiting for " << m_whichIdIsBeingDropped
+                 << "and the id is " << id << "<-------------";
+        if (m_whichIdIsBeingDropped == id) {
+            qDebug() << "Requesting the item to be moved... async... <------";
+
+            // This needs to happen only once, we need to make the captured
+            // variable independent of the member variable and we are not
+            // in C++14
+            const auto where = m_whereTheItemIsBeingDropped;
+            m_whereTheItemIsBeingDropped = -1;
+            _this->m_sourceModel->setResultPosition(id, where);
+
+        }
+    }
+
+    const auto *entry = _this->favoriteFromId(id);
 
     if (!entry || !entry->isValid()) {
         // If the result is not valid, we need to unlink it -- to
@@ -107,9 +145,12 @@ QVariant KAStatsFavoritesModel::data(const QModelIndex& index, int role) const
          : QVariant();
 }
 
-// int KAStatsFavoritesModel::rowCount(const QModelIndex& parent) const
-// {
-// }
+int KAStatsFavoritesModel::rowCount(const QModelIndex& parent) const
+{
+    return parent.isValid()
+        ? 0
+        : ForwardingModel::rowCount(parent) + (dropPlaceholderIndex() != -1);
+}
 
 bool KAStatsFavoritesModel::trigger(int row, const QString &actionId, const QVariant &argument)
 {
@@ -209,8 +250,7 @@ void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const QString 
 
 void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &activity, int index)
 {
-    // TODO: Ask Eike where this is used, and how to test it
-    Q_UNUSED(index)
+    setDropPlaceholderIndex(-1);
 
     if (id.isEmpty()) return;
 
@@ -225,6 +265,16 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
             url, activity,
             Agent(agentForScheme(url.scheme()))
         );
+
+    // Lets handle async repositioning of the item, see ::data
+    qDebug() << "We need to add " << url << "at" << index << "<------------";
+    m_whereTheItemIsBeingDropped = index;
+
+    if (index != -1) {
+        m_whichIdIsBeingDropped = url.toLocalFile();
+    } else {
+        m_whichIdIsBeingDropped.clear();
+    }
 }
 
 void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const Activity &activity)
@@ -254,10 +304,36 @@ int KAStatsFavoritesModel::dropPlaceholderIndex() const
 
 void KAStatsFavoritesModel::setDropPlaceholderIndex(int index)
 {
-    if (m_dropPlaceholderIndex != index) {
+    if (index == -1 && m_dropPlaceholderIndex != -1) {
+        // Removing the placeholder
+        beginRemoveRows(QModelIndex(), m_dropPlaceholderIndex, m_dropPlaceholderIndex);
         m_dropPlaceholderIndex = index;
+        endRemoveRows();
 
+        emit countChanged();
+
+    } else if (index != -1 && m_dropPlaceholderIndex == -1) {
+        // Creating the placeholder
+        beginInsertRows(QModelIndex(), index, index);
+        m_dropPlaceholderIndex = index;
+        endInsertRows();
+
+        emit countChanged();
+
+    } else if (m_dropPlaceholderIndex != index) {
+        // Moving the placeholder
+
+        int modelTo = index + (index > m_dropPlaceholderIndex ? 1 : 0);
+
+        bool ok = beginMoveRows(QModelIndex(), m_dropPlaceholderIndex, m_dropPlaceholderIndex, QModelIndex(), modelTo);
+
+        if (ok) {
+            m_dropPlaceholderIndex = index;
+            endMoveRows();
+        }
     }
+
+    qDebug() << "Placeholder is at " << m_dropPlaceholderIndex << " should be at" << index << "<--------------";
 }
 
 AbstractModel *KAStatsFavoritesModel::favoritesModel()
@@ -281,6 +357,9 @@ void KAStatsFavoritesModel::refresh()
                     | Limit(15);
 
     m_sourceModel = new ResultModel(query, "org.kde.plasma.favorites");
+
+    connect(m_sourceModel, &ResultModel::rowsInserted,
+            this, &KAStatsFavoritesModel::rowsInserted);
 
     QModelIndex index;
 
