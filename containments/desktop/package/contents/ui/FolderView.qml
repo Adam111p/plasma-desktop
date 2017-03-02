@@ -324,11 +324,9 @@ Item {
             if (!item || item.blank) {
                 gridView.hoveredItem = null;
             } else {
-                var aPos = mapToItem(item.actionsOverlay, mouse.x, mouse.y);
-                var hPos = mapToItem(item.hoverArea, mouse.x, mouse.y);
+                var fPos = mapToItem(item.frame, mouse.x, mouse.y);
 
-                if ((hPos.x < 0 || hPos.y < 0 || hPos.x > item.hoverArea.width || hPos.y > item.hoverArea.height)
-                    && aPos.x < 0) {
+                if (fPos.x < 0 || fPos.y < 0 || fPos.x > item.frame.width || fPos.y > item.frame.height) {
                     gridView.hoveredItem = null;
                 }
             }
@@ -521,6 +519,8 @@ Item {
                         hoverActivateTimer.stop();
                     }
 
+                    editor.targetItem = null;
+
                     dir.setDragHotSpotScrollOffset(contentX, contentY);
 
                     if (contentX == 0) {
@@ -553,6 +553,8 @@ Item {
                     if (hoveredItem) {
                         hoverActivateTimer.stop();
                     }
+
+                    editor.targetItem = null;
 
                     dir.setDragHotSpotScrollOffset(contentX, contentY);
 
@@ -809,6 +811,8 @@ Item {
                         dir.paste();
                     } else if (event.matches(StandardKey.Cut)) {
                         dir.cut();
+                    } else if (event.matches(StandardKey.Undo)) {
+                        dir.undo();
                     }
                 }
 
@@ -1072,11 +1076,11 @@ Item {
 
             visible: false
 
-            wrapMode: isPopup ? TextEdit.NoWrap : TextEdit.Wrap
+            wrapMode: root.useListViewMode ? TextEdit.NoWrap : TextEdit.Wrap
             
             textMargin: 0
             
-            horizontalAlignment: isPopup ? TextEdit.AlignHLeft : TextEdit.AlignHCenter
+            horizontalAlignment: root.useListViewMode ? TextEdit.AlignHLeft : TextEdit.AlignHCenter
 
             property Item targetItem: null
 
@@ -1140,7 +1144,7 @@ Item {
             function getXY() {
                 var pos = main.mapFromItem(targetItem, targetItem.labelArea.x, targetItem.labelArea.y);
                 var _x, _y;
-                if(isPopup) {
+                if (root.useListViewMode) {
                    _x = targetItem.labelArea.x - __style.padding.left;
                    _y = pos.y - __style.padding.top;
                 } else {
@@ -1159,7 +1163,7 @@ Item {
             }
             
             function getWidth(addWidthVerticalScroller) {
-                var _width = isPopup ? targetItem.width - units.largeSpacing * 2 : targetItem.label.paintedWidth;
+                var _width = root.useListViewMode ? targetItem.width - units.largeSpacing * 2 : targetItem.label.paintedWidth;
                 return _width + __style.padding.left + __style.padding.right +
                        (addWidthVerticalScroller ? __verticalScrollBar.parent.verticalScrollbarOffset : 0);
             }
