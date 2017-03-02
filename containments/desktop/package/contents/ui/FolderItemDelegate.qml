@@ -138,12 +138,6 @@ Item {
             PlasmaCore.ToolTipArea {
                 id: toolTip
 
-                x: frameLoader.x + Math.min(icon.x, label.x)
-                y: frameLoader.y + icon.y
-
-                width: Math.max(icon.width, label.width)
-                height: (label.y + label.paintedHeight)
-
                 active: (plasmoid.configuration.toolTips && popupDialog == null && !model.blank)
                 interactive: false
                 location: root.useListViewMode ? (plasmoid.location == PlasmaCore.Types.LeftEdge ? PlasmaCore.Types.LeftEdge : PlasmaCore.Types.RightEdge) : plasmoid.location
@@ -162,6 +156,41 @@ Item {
                         main.GridView.view.hoveredItem = main;
                     }
                 }
+
+                states: [
+                    State { // icon view
+                        when: !root.useListViewMode
+
+                        AnchorChanges {
+                            target: toolTip
+                            anchors.horizontalCenter: parent.horizontalCenter
+                        }
+
+                        PropertyChanges {
+                            target: toolTip
+                            x: undefined
+                            y: frameLoader.y + icon.y
+                            width: Math.max(icon.paintedWidth, label.paintedWidth)
+                            height: (label.y + label.paintedHeight) - y
+                        }
+                    },
+                    State { // list view
+                        when: root.useListViewMode
+
+                        AnchorChanges {
+                            target: toolTip
+                            anchors.horizontalCenter: undefined
+                        }
+
+                        PropertyChanges {
+                            target: toolTip
+                            x: frameLoader.x
+                            y: frameLoader.y
+                            width: frameLoader.width
+                            height: frameLoader.height
+                        }
+                    }
+                ]
             }
 
             Loader {
@@ -195,7 +224,7 @@ Item {
                     }
 
                     return (icon.height + (2 * units.smallSpacing) + (label.lineCount
-                    * theme.mSize(theme.defaultFont).height) + (2 * units.largeSpacing));
+                    * theme.mSize(theme.defaultFont).height) + (3 * units.smallSpacing));
                 }
 
                 PlasmaCore.IconItem {
@@ -225,7 +254,7 @@ Item {
                     ]
 
                     anchors {
-                        topMargin: units.largeSpacing
+                        topMargin: (2 * units.smallSpacing)
                         leftMargin: units.smallSpacing
                     }
 
@@ -257,8 +286,8 @@ Item {
                             }
                             PropertyChanges {
                                 target: label
-                                anchors.topMargin: 2 * units.smallSpacing
-                                width: Math.min(label.implicitWidth + units.smallSpacing, parent.width - units.smallSpacing * 8)
+                                anchors.topMargin: units.smallSpacing
+                                width: Math.min(label.implicitWidth + units.smallSpacing, parent.width - units.smallSpacing * 4)
                                 maximumLineCount: plasmoid.configuration.textLines
                                 horizontalAlignment: Text.AlignHCenter
                             }
@@ -315,9 +344,6 @@ Item {
 
                         return true;
                     }
-
-                    x: units.smallSpacing * 3
-                    y: units.smallSpacing * 3
 
                     z: 3
 
