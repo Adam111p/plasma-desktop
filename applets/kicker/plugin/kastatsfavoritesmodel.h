@@ -21,12 +21,14 @@
 #ifndef FAVORITESMODEL_H
 #define FAVORITESMODEL_H
 
-#include "forwardingmodel.h"
+#include "placeholdermodel.h"
 
 #include <QPointer>
 
 #include <KService>
 #include <KConfig>
+
+class PlaceholderModel;
 
 namespace KActivities {
     class Consumer;
@@ -38,14 +40,13 @@ namespace Terms {
 } // namespace Stats
 } // namespace KActivities
 
-class KAStatsFavoritesModel : public ForwardingModel
+class KAStatsFavoritesModel : public PlaceholderModel
 {
     Q_OBJECT
 
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
     Q_PROPERTY(QStringList favorites READ favorites WRITE setFavorites NOTIFY favoritesChanged)
     Q_PROPERTY(int maxFavorites READ maxFavorites WRITE setMaxFavorites NOTIFY maxFavoritesChanged)
-    Q_PROPERTY(int dropPlaceholderIndex READ dropPlaceholderIndex WRITE setDropPlaceholderIndex NOTIFY dropPlaceholderIndexChanged)
 
     Q_PROPERTY(QObject* activities READ activities CONSTANT)
 
@@ -85,9 +86,6 @@ class KAStatsFavoritesModel : public ForwardingModel
         QObject *activities() const;
         Q_INVOKABLE QString activityNameForId(const QString &activityId) const;
 
-        int dropPlaceholderIndex() const;
-        void setDropPlaceholderIndex(int index);
-
         AbstractModel* favoritesModel();
 
     public Q_SLOTS:
@@ -97,7 +95,6 @@ class KAStatsFavoritesModel : public ForwardingModel
         void enabledChanged() const;
         void favoritesChanged() const;
         void maxFavoritesChanged() const;
-        void dropPlaceholderIndexChanged();
 
     private:
         AbstractEntry *favoriteFromId(const QString &id) const;
@@ -115,7 +112,6 @@ class KAStatsFavoritesModel : public ForwardingModel
         void removeOldCachedEntries() const;
         int m_maxFavorites;
 
-        int m_dropPlaceholderIndex;
         mutable int m_whereTheItemIsBeingDropped;
         QString m_whichIdIsBeingDropped;
 

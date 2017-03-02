@@ -26,6 +26,7 @@ set(kickerplugin_SRCS
     plugin/kastatsfavoritesmodel.cpp
     plugin/fileentry.cpp
     plugin/forwardingmodel.cpp
+    plugin/placeholdermodel.cpp
     plugin/funnelmodel.cpp
     plugin/dashboardwindow.cpp
     plugin/kickerplugin.cpp
@@ -42,6 +43,8 @@ set(kickerplugin_SRCS
     plugin/systemsettings.cpp
     plugin/wheelinterceptor.cpp
     plugin/windowsystem.cpp
+    plugin/funnelmodel.cpp
+    plugin/modeltest.cpp
 )
 
 qt5_add_dbus_interface(kickerplugin_SRCS ${KRUNNERAPP_INTERFACE} krunner_interface)
@@ -57,6 +60,7 @@ target_link_libraries(kickerplugin
                       Qt5::Qml
                       Qt5::Quick
                       Qt5::X11Extras
+                      Qt5Test
                       KF5::Activities
                       KF5::ActivitiesStats
                       KF5::ConfigCore

@@ -37,21 +37,61 @@
 #include <KActivities/Stats/ResultSet>
 #include <KActivities/Stats/ResultModel>
 
+#include <QListView>
+
+#include "modeltest.h"
+
 namespace KAStats = KActivities::Stats;
 
 using namespace KAStats;
 using namespace KAStats::Terms;
 
-KAStatsFavoritesModel::KAStatsFavoritesModel(QObject *parent) : ForwardingModel(parent)
+QListView *mainList;
+QListView *sourceList;
+
+KAStatsFavoritesModel::KAStatsFavoritesModel(QObject *parent) : PlaceholderModel(parent)
 , m_enabled(true)
 , m_maxFavorites(-1)
-, m_dropPlaceholderIndex(-1)
 , m_whereTheItemIsBeingDropped(-1)
 , m_sourceModel(nullptr)
 , m_activities(new KActivities::Consumer(this))
 , m_config("TESTTEST")
 {
-    refresh();
+    // new ModelTest(this);
+
+    mainList = new QListView();
+    mainList->setModel(this);
+    mainList->setWindowTitle("Main");
+    mainList->show();
+
+    sourceList = new QListView();
+    sourceList->setWindowTitle("Source");
+    sourceList->show();
+
+    auto query = LinkedResources
+                    | Agent {
+                        "org.kde.plasma.favorites.applications",
+                        "org.kde.plasma.favorites.contacts"
+                      }
+                    | Type::any()
+                    | Activity::current()
+                    | Activity::global()
+                    | Limit(15);
+
+    m_sourceModel = new ResultModel(query, "org.kde.plasma.favorites", this);
+
+    sourceList->setModel(m_sourceModel);
+
+    connect(m_sourceModel, &ResultModel::rowsInserted,
+            this, &KAStatsFavoritesModel::rowsInserted);
+
+    QModelIndex index;
+
+    if (m_sourceModel->canFetchMore(index)) {
+        m_sourceModel->fetchMore(index);
+    }
+
+    setSourceModel(m_sourceModel);
 }
 
 KAStatsFavoritesModel::~KAStatsFavoritesModel()
@@ -63,26 +103,11 @@ QString KAStatsFavoritesModel::description() const
     return i18n("Favorites");
 }
 
-QVariant KAStatsFavoritesModel::data(const QModelIndex& _index, int role) const
+QVariant KAStatsFavoritesModel::data(const QModelIndex& index, int role) const
 {
-    if (!_index.isValid() || _index.row() >= rowCount()) {
+    if (!index.isValid() || index.row() >= rowCount()) {
         return QVariant();
     }
-
-    if (_index.row() == dropPlaceholderIndex()) {
-        if (role == Kicker::IsDropPlaceholderRole) {
-            return true;
-        } else {
-            return QVariant();
-        }
-    }
-
-    const int requestedRow = _index.row();
-
-    const QModelIndex index =
-        dropPlaceholderIndex() != -1 && requestedRow > dropPlaceholderIndex()
-            ? _index.sibling(requestedRow - 1, 0)
-            : _index;
 
     const QString id =
         sourceModel()->data(index, ResultModel::ResourceRole).toString();
@@ -149,7 +174,7 @@ int KAStatsFavoritesModel::rowCount(const QModelIndex& parent) const
 {
     return parent.isValid()
         ? 0
-        : ForwardingModel::rowCount(parent) + (dropPlaceholderIndex() != -1);
+        : PlaceholderModel::rowCount(parent);
 }
 
 bool KAStatsFavoritesModel::trigger(int row, const QString &actionId, const QVariant &argument)
@@ -159,7 +184,7 @@ bool KAStatsFavoritesModel::trigger(int row, const QString &actionId, const QVar
     }
 
     const QString id =
-        ForwardingModel::data(index(row, 0), ResultModel::ResourceRole).toString();
+        PlaceholderModel::data(index(row, 0), ResultModel::ResourceRole).toString();
 
     return m_entries.contains(id)
                 ? m_entries[id]->run(actionId, argument)
@@ -202,12 +227,12 @@ void KAStatsFavoritesModel::removeOldCachedEntries() const
 {
     QList<QUrl> knownUrls;
     for (int row = 0; row < rowCount(); ++row) {
-        qDebug() << "URL we got is" << sourceModel()->data(index(row, 0), ResultModel::ResourceRole);
+        // qDebug() << "URL we got is" << sourceModel()->data(index(row, 0), ResultModel::ResourceRole);
         knownUrls <<
             urlForId(sourceModel()->data(index(row, 0), ResultModel::ResourceRole).toString());
     }
 
-    qDebug() << "Known urls are: " << knownUrls;
+    // qDebug() << "Known urls are: " << knownUrls;
 
     QMutableHashIterator<QString, AbstractEntry*> i(m_entries);
     while (i.hasNext()) {
@@ -250,6 +275,11 @@ void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const QString 
 
 void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &activity, int index)
 {
+    if (index == -1) {
+        index = m_sourceModel->rowCount();
+        setDropPlaceholderIndex(index);
+    }
+
     setDropPlaceholderIndex(-1);
 
     if (id.isEmpty()) return;
@@ -292,48 +322,9 @@ void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const Activity
 void KAStatsFavoritesModel::moveRow(int from, int to)
 {
     const QString id =
-        ForwardingModel::data(index(from, 0), ResultModel::ResourceRole).toString();
+        PlaceholderModel::data(index(from, 0), ResultModel::ResourceRole).toString();
 
     m_sourceModel->setResultPosition(urlForId(id).toString(), to);
-}
-
-int KAStatsFavoritesModel::dropPlaceholderIndex() const
-{
-    return m_dropPlaceholderIndex;
-}
-
-void KAStatsFavoritesModel::setDropPlaceholderIndex(int index)
-{
-    if (index == -1 && m_dropPlaceholderIndex != -1) {
-        // Removing the placeholder
-        beginRemoveRows(QModelIndex(), m_dropPlaceholderIndex, m_dropPlaceholderIndex);
-        m_dropPlaceholderIndex = index;
-        endRemoveRows();
-
-        emit countChanged();
-
-    } else if (index != -1 && m_dropPlaceholderIndex == -1) {
-        // Creating the placeholder
-        beginInsertRows(QModelIndex(), index, index);
-        m_dropPlaceholderIndex = index;
-        endInsertRows();
-
-        emit countChanged();
-
-    } else if (m_dropPlaceholderIndex != index) {
-        // Moving the placeholder
-
-        int modelTo = index + (index > m_dropPlaceholderIndex ? 1 : 0);
-
-        bool ok = beginMoveRows(QModelIndex(), m_dropPlaceholderIndex, m_dropPlaceholderIndex, QModelIndex(), modelTo);
-
-        if (ok) {
-            m_dropPlaceholderIndex = index;
-            endMoveRows();
-        }
-    }
-
-    qDebug() << "Placeholder is at " << m_dropPlaceholderIndex << " should be at" << index << "<--------------";
 }
 
 AbstractModel *KAStatsFavoritesModel::favoritesModel()
@@ -343,33 +334,6 @@ AbstractModel *KAStatsFavoritesModel::favoritesModel()
 
 void KAStatsFavoritesModel::refresh()
 {
-    qDebug() << "Refreshing the model";
-    QObject *oldModel = sourceModel();
-
-    auto query = LinkedResources
-                    | Agent {
-                        "org.kde.plasma.favorites.applications",
-                        "org.kde.plasma.favorites.contacts"
-                      }
-                    | Type::any()
-                    | Activity::current()
-                    | Activity::global()
-                    | Limit(15);
-
-    m_sourceModel = new ResultModel(query, "org.kde.plasma.favorites");
-
-    connect(m_sourceModel, &ResultModel::rowsInserted,
-            this, &KAStatsFavoritesModel::rowsInserted);
-
-    QModelIndex index;
-
-    if (m_sourceModel->canFetchMore(index)) {
-        m_sourceModel->fetchMore(index);
-    }
-
-    setSourceModel(m_sourceModel);
-
-    delete oldModel;
 }
 
 AbstractEntry *KAStatsFavoritesModel::favoriteFromId(const QString &id) const
