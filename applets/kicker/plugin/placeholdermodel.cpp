@@ -107,10 +107,10 @@ QVariant PlaceholderModel::data(const QModelIndex &index, int role) const
                 return true;
 
             case Qt::DisplayRole:
-                return QString();
+                return "placeholder";
 
             case Qt::DecorationRole:
-                return QString();
+                return "select";
 
             default:
                 return QVariant();
@@ -124,15 +124,11 @@ QVariant PlaceholderModel::data(const QModelIndex &index, int role) const
 
 int PlaceholderModel::rowCount(const QModelIndex &parent) const
 {
-    if (!m_sourceModel) {
+    if (!m_sourceModel || parent.isValid()) {
         return 0;
     }
 
-    // qDebug() << "Row count is: "
-    //          << (m_sourceModel->rowCount(indexToSourceIndex(parent))
-    //             + (m_dropPlaceholderIndex != -1 ? 1 : 0)) << "<--------------";
-
-    return m_sourceModel->rowCount(indexToSourceIndex(parent))
+    return m_sourceModel->rowCount()
                 + (m_dropPlaceholderIndex != -1 ? 1 : 0);
 }
 
@@ -255,14 +251,12 @@ void PlaceholderModel::connectSignals()
         return;
     }
 
-    qDebug() << m_sourceModel << "CONNECTING SINGALS!!! <---------";
     const auto sourceModelPtr = m_sourceModel.data();
 
     connect(sourceModelPtr, SIGNAL(destroyed()), this, SLOT(reset()));
 
     connect(sourceModelPtr, &QAbstractItemModel::dataChanged,
             this, [this] (const QModelIndex &from, const QModelIndex &to, const QVector<int> &roles) {
-                qDebug() << "Data changing" << from << to << roles << "<--------------";
                 emit dataChanged(sourceIndexToIndex(from),
                                  sourceIndexToIndex(to),
                                  roles);
@@ -274,7 +268,6 @@ void PlaceholderModel::connectSignals()
                     qWarning() << "We do not support tree models";
 
                 } else {
-                    qDebug() << "Rows inserting" << parent << from << to << "<--------------";
                     beginInsertRows(QModelIndex(),
                                     sourceRowToRow(from),
                                     sourceRowToRow(to));
@@ -284,7 +277,6 @@ void PlaceholderModel::connectSignals()
 
     connect(sourceModelPtr, &QAbstractItemModel::rowsInserted,
             this, [this] {
-                qDebug() << "Rows insert ended" << "<--------------";
                 endInsertRows();
                 emit countChanged();
             });
@@ -296,7 +288,6 @@ void PlaceholderModel::connectSignals()
                     qWarning() << "We do not support tree models";
 
                 } else {
-                    qDebug() << "Rows moving" << source << from << to << dest << destRow << "<--------------";
                     beginMoveRows(QModelIndex(),
                                   sourceRowToRow(from),
                                   sourceRowToRow(to),
@@ -307,7 +298,6 @@ void PlaceholderModel::connectSignals()
 
     connect(sourceModelPtr, &QAbstractItemModel::rowsMoved,
             this, [this] {
-                qDebug() << "Rows move ended" << "<--------------";
                 endMoveRows();
             });
 
@@ -318,7 +308,6 @@ void PlaceholderModel::connectSignals()
                     qWarning() << "We do not support tree models";
 
                 } else {
-                    qDebug() << "Rows removing" << parent << from << to << "<--------------";
                     beginRemoveRows(QModelIndex(),
                                     sourceRowToRow(from),
                                     sourceRowToRow(to));
@@ -327,7 +316,6 @@ void PlaceholderModel::connectSignals()
 
     connect(sourceModelPtr, &QAbstractItemModel::rowsRemoved,
             this, [this] {
-                qDebug() << "Rows remove ended" << "<--------------";
                 endRemoveRows();
                 emit countChanged();
             });
@@ -335,13 +323,11 @@ void PlaceholderModel::connectSignals()
 
     connect(sourceModelPtr, &QAbstractItemModel::modelAboutToBeReset,
             this, [this] {
-                qDebug() << "Model is going for a reset" << "<--------------";
                 beginResetModel();
             });
 
     connect(sourceModelPtr, &QAbstractItemModel::modelReset,
             this, [this] {
-                qDebug() << "Model was reset" << "<--------------";
                 endResetModel();
                 emit countChanged();
             });
@@ -360,7 +346,6 @@ void PlaceholderModel::disconnectSignals()
         return;
     }
 
-    qDebug() << "DISCON <---------";
     disconnect(m_sourceModel, 0, this, 0);
 }
 
@@ -391,12 +376,11 @@ void PlaceholderModel::setDropPlaceholderIndex(int index)
 
     } else if (m_dropPlaceholderIndex != index) {
         // Moving the placeholder
-
         int modelTo = index + (index > m_dropPlaceholderIndex ? 1 : 0);
 
-        bool ok = beginMoveRows(QModelIndex(), m_dropPlaceholderIndex, m_dropPlaceholderIndex, QModelIndex(), modelTo);
-
-        if (ok) {
+        if (beginMoveRows(
+                    QModelIndex(), m_dropPlaceholderIndex, m_dropPlaceholderIndex,
+                    QModelIndex(), modelTo)) {
             m_dropPlaceholderIndex = index;
             endMoveRows();
         }

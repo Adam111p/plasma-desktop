@@ -57,8 +57,7 @@ KAStatsFavoritesModel::KAStatsFavoritesModel(QObject *parent) : PlaceholderModel
 , m_activities(new KActivities::Consumer(this))
 , m_config("TESTTEST")
 {
-    // new ModelTest(this);
-
+    new ModelTest(this, this);
     mainList = new QListView();
     mainList->setModel(this);
     mainList->setWindowTitle("Main");
@@ -81,9 +80,6 @@ KAStatsFavoritesModel::KAStatsFavoritesModel(QObject *parent) : PlaceholderModel
     m_sourceModel = new ResultModel(query, "org.kde.plasma.favorites", this);
 
     sourceList->setModel(m_sourceModel);
-
-    connect(m_sourceModel, &ResultModel::rowsInserted,
-            this, &KAStatsFavoritesModel::rowsInserted);
 
     QModelIndex index;
 
@@ -122,11 +118,7 @@ QVariant KAStatsFavoritesModel::internalData(const QModelIndex& index, int role)
         // for it to get here. When it does, request it to be moved
         // to its desired location. We can not do it in a better way
         // because the model might be reset in the mean time
-        qDebug() << "Waiting for " << m_whichIdIsBeingDropped
-                 << "and the id is " << id << "<-------------";
         if (m_whichIdIsBeingDropped == id) {
-            qDebug() << "Requesting the item to be moved... async... <------";
-
             // This needs to happen only once, we need to make the captured
             // variable independent of the member variable and we are not
             // in C++14
@@ -168,13 +160,6 @@ QVariant KAStatsFavoritesModel::internalData(const QModelIndex& index, int role)
          : role == Kicker::HasActionListRole ? entry->hasActions()
          : role == Kicker::ActionListRole ? entry->actions()
          : QVariant();
-}
-
-int KAStatsFavoritesModel::rowCount(const QModelIndex& parent) const
-{
-    return parent.isValid()
-        ? 0
-        : PlaceholderModel::rowCount(parent);
 }
 
 bool KAStatsFavoritesModel::trigger(int row, const QString &actionId, const QVariant &argument)
@@ -286,8 +271,6 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
 
     const auto url = urlForId(id);
 
-    qDebug() << "Adding favorite to " << id << activity << url;
-
     // This is a file, we want to check that it exists
     if (url.isLocalFile() && !QFileInfo::exists(url.toLocalFile())) return;
 
@@ -297,7 +280,6 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
         );
 
     // Lets handle async repositioning of the item, see ::data
-    qDebug() << "We need to add " << url << "at" << index << "<------------";
     m_whereTheItemIsBeingDropped = index;
 
     if (index != -1) {
@@ -310,8 +292,6 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
 void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const Activity &activity)
 {
     const auto url = urlForId(id);
-
-    qDebug() << "Removing favorite from " << id << activity << url;
 
     m_sourceModel->unlinkFromActivity(
             url, activity,
@@ -343,8 +323,6 @@ AbstractEntry *KAStatsFavoritesModel::favoriteFromId(const QString &id) const
     if (!m_entries.contains(id)) {
         const QUrl url(id);
         const QString &scheme = url.scheme();
-
-        qDebug() << "favoriteFromId: " << id << " - " << url << " - " << scheme;
 
         AbstractEntry *entry = nullptr;
 

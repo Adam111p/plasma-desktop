@@ -56,8 +56,6 @@ class KAStatsFavoritesModel : public PlaceholderModel
 
         QString description() const;
 
-        int rowCount(const QModelIndex &parent = QModelIndex()) const;
-
         Q_INVOKABLE bool trigger(int row, const QString &actionId, const QVariant &argument);
 
         bool enabled() const;
@@ -87,7 +85,7 @@ class KAStatsFavoritesModel : public PlaceholderModel
         AbstractModel* favoritesModel();
 
     protected:
-        QVariant internalData(const QModelIndex &index, int role = Qt::DisplayRole) const;
+        QVariant internalData(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
     public Q_SLOTS:
         virtual void refresh();
