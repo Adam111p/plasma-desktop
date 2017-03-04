@@ -117,8 +117,6 @@ class KAStatsFavoritesModel : public PlaceholderModel
         KActivities::Stats::ResultModel *m_sourceModel;
         KActivities::Consumer *m_activities;
         mutable QList<QUrl> m_invalidUrls;
-
-        KConfig m_config;
 };
 
 #endif

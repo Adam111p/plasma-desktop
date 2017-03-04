@@ -49,7 +49,6 @@ KAStatsFavoritesModel::KAStatsFavoritesModel(QObject *parent)
 , m_whereTheItemIsBeingDropped(-1)
 , m_sourceModel(nullptr)
 , m_activities(new KActivities::Consumer(this))
-, m_config("TESTTEST")
 {
     auto query = LinkedResources
                     | Agent {
@@ -186,7 +185,19 @@ QStringList KAStatsFavoritesModel::favorites() const
 
 void KAStatsFavoritesModel::setFavorites(const QStringList& favorites)
 {
-    qDebug() << "We are asked to set these favorites: " << favorites << "<==============";
+    KConfig config("kactivitymanagerd-statsrc");
+    KConfigGroup group(&config, "ResultModel-Custom-org.kde.plasma.favorites");
+
+    bool alreadyImported = group.readEntry("oldFavoritesImported", false);
+
+    if (alreadyImported) return;
+
+    group.writeEntry("oldFavoritesImported", true);
+    config.sync();
+
+    for (const auto& favorite: favorites) {
+        addFavoriteTo(favorite, Activity::global());
+    }
 }
 
 void KAStatsFavoritesModel::removeOldCachedEntries() const
@@ -238,6 +249,7 @@ void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const QString 
 
 void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &activity, int index)
 {
+    qDebug() << "Add to" << id << activity << "<=======================";
     if (index == -1) {
         index = m_sourceModel->rowCount();
         setDropPlaceholderIndex(index);
