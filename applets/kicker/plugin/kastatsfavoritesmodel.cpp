@@ -103,7 +103,7 @@ QString KAStatsFavoritesModel::description() const
     return i18n("Favorites");
 }
 
-QVariant KAStatsFavoritesModel::data(const QModelIndex& index, int role) const
+QVariant KAStatsFavoritesModel::internalData(const QModelIndex& index, int role) const
 {
     if (!index.isValid() || index.row() >= rowCount()) {
         return QVariant();

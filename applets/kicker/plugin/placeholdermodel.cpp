@@ -92,19 +92,33 @@ QModelIndex PlaceholderModel::parent(const QModelIndex &index) const
     return QModelIndex();
 }
 
+QVariant PlaceholderModel::internalData(const QModelIndex &index, int role) const
+{
+    return m_sourceModel->data(indexToSourceIndex(index), role);
+}
+
 QVariant PlaceholderModel::data(const QModelIndex &index, int role) const
 {
     const auto row = index.row();
 
     if (m_dropPlaceholderIndex == row) {
-        if (role == Kicker::IsDropPlaceholderRole) {
-            return true;
-        } else {
-            return QVariant();
+        switch (role) {
+            case Kicker::IsDropPlaceholderRole:
+                return true;
+
+            case Qt::DisplayRole:
+                return QString();
+
+            case Qt::DecorationRole:
+                return QString();
+
+            default:
+                return QVariant();
+
         }
     }
 
-    return m_sourceModel ? m_sourceModel->data(indexToSourceIndex(index), role)
+    return m_sourceModel ? internalData(index, role)
                          : QVariant();
 }
 
@@ -242,10 +256,11 @@ void PlaceholderModel::connectSignals()
     }
 
     qDebug() << m_sourceModel << "CONNECTING SINGALS!!! <---------";
+    const auto sourceModelPtr = m_sourceModel.data();
 
-    connect(m_sourceModel, SIGNAL(destroyed()), this, SLOT(reset()));
+    connect(sourceModelPtr, SIGNAL(destroyed()), this, SLOT(reset()));
 
-    connect(m_sourceModel, &QAbstractItemModel::dataChanged,
+    connect(sourceModelPtr, &QAbstractItemModel::dataChanged,
             this, [this] (const QModelIndex &from, const QModelIndex &to, const QVector<int> &roles) {
                 qDebug() << "Data changing" << from << to << roles << "<--------------";
                 emit dataChanged(sourceIndexToIndex(from),
@@ -253,7 +268,7 @@ void PlaceholderModel::connectSignals()
                                  roles);
             });
 
-    connect(m_sourceModel, &QAbstractItemModel::rowsAboutToBeInserted,
+    connect(sourceModelPtr, &QAbstractItemModel::rowsAboutToBeInserted,
             this, [this] (const QModelIndex &parent, int from, int to) {
                 if (parent.isValid()) {
                     qWarning() << "We do not support tree models";
@@ -267,7 +282,7 @@ void PlaceholderModel::connectSignals()
                 }
             });
 
-    connect(m_sourceModel, &QAbstractItemModel::rowsInserted,
+    connect(sourceModelPtr, &QAbstractItemModel::rowsInserted,
             this, [this] {
                 qDebug() << "Rows insert ended" << "<--------------";
                 endInsertRows();
@@ -275,7 +290,7 @@ void PlaceholderModel::connectSignals()
             });
 
 
-    connect(m_sourceModel, &QAbstractItemModel::rowsAboutToBeMoved,
+    connect(sourceModelPtr, &QAbstractItemModel::rowsAboutToBeMoved,
             this, [this] (const QModelIndex &source, int from, int to, const QModelIndex &dest, int destRow) {
                 if (source.isValid() || dest.isValid()) {
                     qWarning() << "We do not support tree models";
@@ -290,14 +305,14 @@ void PlaceholderModel::connectSignals()
                 }
             });
 
-    connect(m_sourceModel, &QAbstractItemModel::rowsMoved,
+    connect(sourceModelPtr, &QAbstractItemModel::rowsMoved,
             this, [this] {
                 qDebug() << "Rows move ended" << "<--------------";
                 endMoveRows();
             });
 
 
-    connect(m_sourceModel, &QAbstractItemModel::rowsAboutToBeRemoved,
+    connect(sourceModelPtr, &QAbstractItemModel::rowsAboutToBeRemoved,
             this, [this] (const QModelIndex &parent, int from, int to) {
                 if (parent.isValid()) {
                     qWarning() << "We do not support tree models";
@@ -310,7 +325,7 @@ void PlaceholderModel::connectSignals()
                 }
             });
 
-    connect(m_sourceModel, &QAbstractItemModel::rowsRemoved,
+    connect(sourceModelPtr, &QAbstractItemModel::rowsRemoved,
             this, [this] {
                 qDebug() << "Rows remove ended" << "<--------------";
                 endRemoveRows();
@@ -318,13 +333,13 @@ void PlaceholderModel::connectSignals()
             });
 
 
-    connect(m_sourceModel, &QAbstractItemModel::modelAboutToBeReset,
+    connect(sourceModelPtr, &QAbstractItemModel::modelAboutToBeReset,
             this, [this] {
                 qDebug() << "Model is going for a reset" << "<--------------";
                 beginResetModel();
             });
 
-    connect(m_sourceModel, &QAbstractItemModel::modelReset,
+    connect(sourceModelPtr, &QAbstractItemModel::modelReset,
             this, [this] {
                 qDebug() << "Model was reset" << "<--------------";
                 endResetModel();
@@ -332,9 +347,9 @@ void PlaceholderModel::connectSignals()
             });
 
     // We do not have persistant indices
-    // connect(m_sourceModel, &QAbstractItemModel::layoutAboutToBeChanged),
+    // connect(sourceModelPtr, &QAbstractItemModel::layoutAboutToBeChanged),
     //         this, &PlaceholderModel::layoutAboutToBeChanged);
-    // connect(m_sourceModel, &QAbstractItemModel::layoutChanged),
+    // connect(sourceModelPtr, &QAbstractItemModel::layoutChanged),
     //         this, SIGNAL(layoutChanged(QList<QPersistentModelIndex>,QAbstractItemModel::LayoutChangeHint)),
     //         Qt::UniqueConnection);
 }
