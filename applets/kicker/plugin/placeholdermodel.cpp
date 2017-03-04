@@ -106,11 +106,12 @@ QVariant PlaceholderModel::data(const QModelIndex &index, int role) const
             case Kicker::IsDropPlaceholderRole:
                 return true;
 
-            case Qt::DisplayRole:
-                return "placeholder";
-
-            case Qt::DecorationRole:
-                return "select";
+            // TODO: Maybe it would be nice to show something here?
+            // case Qt::DisplayRole:
+            //     return "placeholder";
+            //
+            // case Qt::DecorationRole:
+            //     return "select";
 
             default:
                 return QVariant();

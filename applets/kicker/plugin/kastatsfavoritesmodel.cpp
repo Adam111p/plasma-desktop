@@ -37,19 +37,13 @@
 #include <KActivities/Stats/ResultSet>
 #include <KActivities/Stats/ResultModel>
 
-#include <QListView>
-
-#include "modeltest.h"
-
 namespace KAStats = KActivities::Stats;
 
 using namespace KAStats;
 using namespace KAStats::Terms;
 
-QListView *mainList;
-QListView *sourceList;
-
-KAStatsFavoritesModel::KAStatsFavoritesModel(QObject *parent) : PlaceholderModel(parent)
+KAStatsFavoritesModel::KAStatsFavoritesModel(QObject *parent)
+: PlaceholderModel(parent)
 , m_enabled(true)
 , m_maxFavorites(-1)
 , m_whereTheItemIsBeingDropped(-1)
@@ -57,16 +51,6 @@ KAStatsFavoritesModel::KAStatsFavoritesModel(QObject *parent) : PlaceholderModel
 , m_activities(new KActivities::Consumer(this))
 , m_config("TESTTEST")
 {
-    new ModelTest(this, this);
-    mainList = new QListView();
-    mainList->setModel(this);
-    mainList->setWindowTitle("Main");
-    mainList->show();
-
-    sourceList = new QListView();
-    sourceList->setWindowTitle("Source");
-    sourceList->show();
-
     auto query = LinkedResources
                     | Agent {
                         "org.kde.plasma.favorites.applications",
@@ -78,8 +62,6 @@ KAStatsFavoritesModel::KAStatsFavoritesModel(QObject *parent) : PlaceholderModel
                     | Limit(15);
 
     m_sourceModel = new ResultModel(query, "org.kde.plasma.favorites", this);
-
-    sourceList->setModel(m_sourceModel);
 
     QModelIndex index;
 
@@ -150,8 +132,6 @@ QVariant KAStatsFavoritesModel::internalData(const QModelIndex& index, int role)
                                           : QVariant();
     }
 
-    // qDebug() << "Entry: " << entry->name() << entry->icon();
-
     return role == Qt::DisplayRole ? entry->name()
          : role == Qt::DecorationRole ? entry->icon()
          : role == Kicker::DescriptionRole ? entry->description()
@@ -206,18 +186,16 @@ QStringList KAStatsFavoritesModel::favorites() const
 
 void KAStatsFavoritesModel::setFavorites(const QStringList& favorites)
 {
+    qDebug() << "We are asked to set these favorites: " << favorites << "<==============";
 }
 
 void KAStatsFavoritesModel::removeOldCachedEntries() const
 {
     QList<QUrl> knownUrls;
     for (int row = 0; row < rowCount(); ++row) {
-        // qDebug() << "URL we got is" << sourceModel()->data(index(row, 0), ResultModel::ResourceRole);
         knownUrls <<
             urlForId(sourceModel()->data(index(row, 0), ResultModel::ResourceRole).toString());
     }
-
-    // qDebug() << "Known urls are: " << knownUrls;
 
     QMutableHashIterator<QString, AbstractEntry*> i(m_entries);
     while (i.hasNext()) {
@@ -390,8 +368,6 @@ QStringList KAStatsFavoritesModel::linkedActivitiesFor(const QString &id) const
         url.scheme() == "file" ?
             url.toLocalFile() : url.toString();
 
-    qDebug() << "Fetching linked activities for: " << id << urlString;
-
     auto query = LinkedResources
                     | Agent {
                         "org.kde.plasma.favorites.applications",
@@ -404,11 +380,9 @@ QStringList KAStatsFavoritesModel::linkedActivitiesFor(const QString &id) const
     ResultSet results(query);
 
     for (const auto &result: results) {
-        qDebug() << "Linked activities for " << id << "are" << result.linkedActivities();
         return result.linkedActivities();
     }
 
-    qDebug() << "NO linked activities for " << id;
     return {};
 }
 
