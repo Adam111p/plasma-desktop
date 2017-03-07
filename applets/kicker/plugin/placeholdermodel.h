@@ -77,7 +77,7 @@ class PlaceholderModel : public AbstractModel
         int sourceRowToRow(int sourceRow) const;
         int rowToSourceRow(int row) const;
 
-        virtual QVariant internalData(const QModelIndex &index, int role) const;
+        virtual QVariant internalData(const QModelIndex &index, int role) const = 0;
 
         void connectSignals();
         void disconnectSignals();

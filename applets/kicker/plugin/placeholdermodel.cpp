@@ -92,11 +92,6 @@ QModelIndex PlaceholderModel::parent(const QModelIndex &index) const
     return QModelIndex();
 }
 
-QVariant PlaceholderModel::internalData(const QModelIndex &index, int role) const
-{
-    return m_sourceModel->data(indexToSourceIndex(index), role);
-}
-
 QVariant PlaceholderModel::data(const QModelIndex &index, int role) const
 {
     const auto row = index.row();

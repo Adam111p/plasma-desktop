@@ -249,7 +249,6 @@ void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const QString 
 
 void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &activity, int index)
 {
-    qDebug() << "Add to" << id << activity << "<=======================";
     if (index == -1) {
         index = m_sourceModel->rowCount();
         setDropPlaceholderIndex(index);
@@ -292,9 +291,9 @@ void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const Activity
 void KAStatsFavoritesModel::moveRow(int from, int to)
 {
     const QString id =
-        PlaceholderModel::data(index(from, 0), ResultModel::ResourceRole).toString();
+        data(index(from, 0), Kicker::UrlRole).toString();
 
-    m_sourceModel->setResultPosition(urlForId(id).toString(), to);
+    m_sourceModel->setResultPosition(urlForId(id).toLocalFile(), to);
 }
 
 AbstractModel *KAStatsFavoritesModel::favoritesModel()
