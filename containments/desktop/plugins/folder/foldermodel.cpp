@@ -122,6 +122,8 @@ FolderModel::FolderModel(QObject *parent) : QSortFilterProxyModel(parent),
     connect(dirLister, &KCoreDirLister::started, this, &FolderModel::listingStarted);
     void (KCoreDirLister::*myCompletedSignal)() = &KCoreDirLister::completed;
     QObject::connect(dirLister, myCompletedSignal, this, &FolderModel::listingCompleted);
+    void (KCoreDirLister::*myCanceledSignal)() = &KCoreDirLister::canceled;
+    QObject::connect(dirLister, myCanceledSignal, this, &FolderModel::listingCanceled);
 
     m_dirModel = new KDirModel(this);
     m_dirModel->setDirLister(dirLister);
@@ -1380,7 +1382,7 @@ void FolderModel::updateActions()
     }
 }
 
-void FolderModel::openContextMenu()
+void FolderModel::openContextMenu(QQuickItem *visualParent)
 {
     QModelIndexList indexes = m_selectionModel->selectedIndexes();
 
@@ -1509,7 +1511,11 @@ void FolderModel::openContextMenu()
 
     }
 
-    menu->popup(QCursor::pos());
+    if (visualParent) {
+        menu->popup(visualParent->mapToGlobal(QPointF(0, visualParent->height())).toPoint());
+    } else {
+        menu->popup(QCursor::pos());
+    }
     connect(menu, &QMenu::aboutToHide, [menu]() { menu->deleteLater(); });
 }
 
