@@ -263,7 +263,17 @@ Item {
                     width: root.useListViewMode ? main.GridView.view.iconSize : (parent.width - 2 * units.smallSpacing)
                     height: main.GridView.view.iconSize
 
-                    opacity: root.useListViewMode && selectionButton ? 0.3 : 1.0
+                    opacity: {
+                        if (root.useListViewMode && selectionButton) {
+                            return 0.3;
+                        }
+
+                        if (model.isHidden) {
+                            return 0.6;
+                        }
+
+                        return 1.0;
+                    }
 
                     animated: false
                     usesPlasmaTheme: false
@@ -323,6 +333,8 @@ Item {
                     color: (frameLoader.textShadow && frameLoader.textShadow.visible
                         ? "#fff" : PlasmaCore.ColorScope.textColor)
 
+                    opacity: model.isHidden ? 0.6 : 1
+
                     text: model.blank ? "" : model.display
 
                     font.italic: model.isLink
@@ -359,11 +371,8 @@ Item {
                                 target: actions
                                 anchors.horizontalCenter: undefined
                                 anchors.verticalCenter: undefined
-                            }
-                            PropertyChanges {
-                                target: actions
-                                x: 0
-                                y: 0
+                                anchors.left: parent.left
+                                anchors.top: parent.top
                             }
                         },
                         State { // list view
@@ -373,11 +382,8 @@ Item {
                                 target: actions
                                 anchors.horizontalCenter: icon.horizontalCenter
                                 anchors.verticalCenter: icon.verticalCenter
-                            }
-                            PropertyChanges {
-                                target: actions
-                                x: undefined
-                                y: undefined
+                                anchors.left: undefined
+                                anchors.top: undefined
                             }
                         }
                     ]
@@ -434,6 +440,8 @@ Item {
                         spread: 0.15
 
                         color: "black"
+
+                        opacity: model.isHidden ? 0.6 : 1
 
                         source: label
 
