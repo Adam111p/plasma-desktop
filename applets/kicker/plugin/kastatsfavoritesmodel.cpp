@@ -29,6 +29,7 @@
 #include <QTimer>
 
 #include <KLocalizedString>
+#include <KSharedConfig>
 #include <KConfigGroup>
 
 #include <KActivities/Consumer>
@@ -167,6 +168,7 @@ int KAStatsFavoritesModel::maxFavorites() const
 
 void KAStatsFavoritesModel::setMaxFavorites(int max)
 {
+    Q_UNUSED(max);
 }
 
 void KAStatsFavoritesModel::setEnabled(bool enable)
@@ -185,15 +187,15 @@ QStringList KAStatsFavoritesModel::favorites() const
 
 void KAStatsFavoritesModel::setFavorites(const QStringList& favorites)
 {
-    KConfig config("kactivitymanagerd-statsrc");
-    KConfigGroup group(&config, "ResultModel-Custom-org.kde.plasma.favorites");
+    auto config = KSharedConfig::openConfig("kactivitymanagerd-statsrc");
+    KConfigGroup group(config, "ResultModel-Custom-org.kde.plasma.favorites");
 
     bool alreadyImported = group.readEntry("oldFavoritesImported", false);
 
     if (alreadyImported) return;
 
     group.writeEntry("oldFavoritesImported", true);
-    config.sync();
+    config->sync();
 
     for (const auto& favorite: favorites) {
         addFavoriteTo(favorite, Activity::global());
@@ -249,9 +251,12 @@ void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const QString 
 
 void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &activity, int index)
 {
+    qDebug() << "";
+    qDebug() << "Add favorite to" << id << activity << index << " <================###=";
+
     if (index == -1) {
         index = m_sourceModel->rowCount();
-        setDropPlaceholderIndex(index);
+        qDebug() << "    changed to " << index << " <---------";
     }
 
     setDropPlaceholderIndex(-1);
@@ -260,18 +265,25 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
 
     const auto url = urlForId(id);
 
+    qDebug() << "    url " << url << " <---------";
+
     // This is a file, we want to check that it exists
     if (url.isLocalFile() && !QFileInfo::exists(url.toLocalFile())) return;
 
+    qDebug() << "Calling to link to the activity:"
+             << url << activity << agentForScheme(url.scheme())
+             << " <---------";
     m_sourceModel->linkToActivity(
             url, activity,
             Agent(agentForScheme(url.scheme()))
         );
 
     // Lets handle async repositioning of the item, see ::data
+    qDebug() << "    index - where the item is being dropped" << m_whereTheItemIsBeingDropped << " <---------";
     m_whereTheItemIsBeingDropped = index;
 
     if (index != -1) {
+        qDebug() << "    which item is being dropped" << url.toLocalFile() << " <---------";
         m_whichIdIsBeingDropped = url.toLocalFile();
     } else {
         m_whichIdIsBeingDropped.clear();
