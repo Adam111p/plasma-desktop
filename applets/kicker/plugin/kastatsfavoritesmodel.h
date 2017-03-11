@@ -84,9 +84,6 @@ class KAStatsFavoritesModel : public PlaceholderModel
 
         AbstractModel* favoritesModel();
 
-    protected:
-        QVariant internalData(const QModelIndex &index, int role = Qt::DisplayRole) const override;
-
     public Q_SLOTS:
         virtual void refresh();
 
@@ -96,27 +93,22 @@ class KAStatsFavoritesModel : public PlaceholderModel
         void maxFavoritesChanged() const;
 
     private:
-        AbstractEntry *favoriteFromId(const QString &id) const;
+        class Private;
+        Private * const d;
 
-        QUrl urlForId(const QString &id) const;
-        QString agentForScheme(const QString &scheme) const;
+        AbstractEntry *favoriteFromId(const QString &id) const;
 
         void addFavoriteTo(const QString &id, const KActivities::Stats::Terms::Activity &activityId, int index = -1);
         void removeFavoriteFrom(const QString &id, const KActivities::Stats::Terms::Activity &activityId);
 
         bool m_enabled;
 
-        // QList<AbstractEntry *> m_entryList;
-        mutable QHash<QString, AbstractEntry *> m_entries;
-        void removeOldCachedEntries() const;
         int m_maxFavorites;
 
         mutable int m_whereTheItemIsBeingDropped;
         QString m_whichIdIsBeingDropped;
 
-        KActivities::Stats::ResultModel *m_sourceModel;
         KActivities::Consumer *m_activities;
-        mutable QList<QUrl> m_invalidUrls;
 };
 
 #endif

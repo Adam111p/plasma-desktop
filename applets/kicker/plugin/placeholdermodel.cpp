@@ -114,7 +114,7 @@ QVariant PlaceholderModel::data(const QModelIndex &index, int role) const
         }
     }
 
-    return m_sourceModel ? internalData(index, role)
+    return m_sourceModel ? m_sourceModel->data(indexToSourceIndex(index), role)
                          : QVariant();
 }
 
