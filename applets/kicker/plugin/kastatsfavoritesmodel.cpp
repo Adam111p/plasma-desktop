@@ -228,7 +228,6 @@ KAStatsFavoritesModel::KAStatsFavoritesModel(QObject *parent)
   )
 , m_enabled(true)
 , m_maxFavorites(-1)
-, m_whereTheItemIsBeingDropped(-1)
 , m_activities(new KActivities::Consumer(this))
 {
     QModelIndex index;
@@ -335,10 +334,6 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
 {
     if (id.isEmpty()) return;
 
-    if (index == -1) {
-        index = d->rowCount();
-    }
-
     qDebug() << "";
     qDebug() << "Add favorite to" << id << activity << index << " <================###=";
 
@@ -355,16 +350,8 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
     d->linkToActivity(QUrl(path), activity,
                       Agent(agentForPath(path)));
 
-    // Lets handle async repositioning of the item, see ::data
-    qDebug() << "    index - where the item is being dropped"
-             << m_whereTheItemIsBeingDropped << " <---------";
-    m_whereTheItemIsBeingDropped = index;
-
     if (index != -1) {
-        qDebug() << "    which item is being dropped" << path << " <---------";
-        m_whichIdIsBeingDropped = path;
-    } else {
-        m_whichIdIsBeingDropped.clear();
+        d->setResultPosition(path, index);
     }
 }
 

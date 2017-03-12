@@ -105,9 +105,6 @@ class KAStatsFavoritesModel : public PlaceholderModel
 
         int m_maxFavorites;
 
-        mutable int m_whereTheItemIsBeingDropped;
-        QString m_whichIdIsBeingDropped;
-
         KActivities::Consumer *m_activities;
 };
 
