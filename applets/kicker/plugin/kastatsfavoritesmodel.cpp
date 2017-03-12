@@ -43,11 +43,10 @@ namespace KAStats = KActivities::Stats;
 using namespace KAStats;
 using namespace KAStats::Terms;
 
-QString agentForScheme(const QString &scheme)
+QString agentForPath(const QString &url)
 {
-    return scheme ==
-        QStringLiteral("ktp") ? "org.kde.plasma.favorites.contacts"
-                              : "org.kde.plasma.favorites.applications";
+    return url.startsWith("ktp:") ? "org.kde.plasma.favorites.contacts"
+                                  : "org.kde.plasma.favorites.applications";
 }
 
 class KAStatsFavoritesModel::Private: public ResultModel {
@@ -58,12 +57,14 @@ public:
     {
     }
 
-    QUrl urlForId(const QString &id) const
+    QString pathForId(const QString &id) const
     {
         const auto entry = favoriteFromId(id);
 
         const auto url = entry && entry->isValid() ? entry->url()
                                                    : QUrl();
+
+        qDebug() << "pathForId - id = " << id << " url = " << url;
 
         // We want to resolve symbolic links not to have two paths
         // refer to the same .desktop file
@@ -71,11 +72,14 @@ public:
             QFileInfo file(url.toLocalFile());
 
             if (file.exists()) {
-                return QUrl::fromLocalFile(file.canonicalFilePath());
+                qDebug() << "    <-----" << file.canonicalFilePath();
+                return file.canonicalFilePath();
             }
         }
 
-        return url;
+        Q_ASSERT(url.scheme() != "file");
+        Q_ASSERT(!url.toString().isEmpty());
+        return url.toString();
     }
 
     AbstractEntry *favoriteFromId(const QString &id) const
@@ -135,15 +139,18 @@ public:
                      << favorite->url().toLocalFile();
         }
 
+        QSet<AbstractEntry*> entriesToDelete;
         QMutableHashIterator<QString, AbstractEntry*> i(m_entries);
         while (i.hasNext()) {
             i.next();
 
             if (!knownIds.contains(i.key())) {
-                delete i.value();
+                entriesToDelete << i.value();
                 i.remove();
             }
         }
+
+        qDeleteAll(entriesToDelete);
     }
 
     QVariant data(const QModelIndex &index, int role) const override
@@ -152,23 +159,19 @@ public:
             return QVariant();
         }
 
-        const auto id = ResultModel::data(index, ResultModel::ResourceRole).toString();
-
         const auto _this = const_cast<Private*>(this);
-
-        const auto *entry = _this->favoriteFromId(id);
+        const auto id    = ResultModel::data(index, ResultModel::ResourceRole).toString();
+        const auto entry = _this->favoriteFromId(id);
 
         if (!entry || !entry->isValid()) {
             // If the result is not valid, we need to unlink it -- to
             // remove it from the model
-            const auto url = urlForId(id);
+            const auto path = pathForId(id);
 
-            if (!m_invalidUrls.contains(url)) {
-                _this->unlinkFromActivity(
-                        url, Activity::any(),
-                        Agent(agentForScheme(url.scheme()))
-                    );
-                m_invalidUrls << url;
+            if (!m_invalidPaths.contains(path)) {
+                _this->unlinkFromActivity(QUrl(path), Activity::any(),
+                                          Agent(agentForPath(path)));
+                m_invalidPaths << path;
             }
 
             return role == Qt::DecorationRole ? "unknown"
@@ -199,7 +202,7 @@ public:
     }
 
     KAStatsFavoritesModel *const q;
-    mutable QList<QUrl> m_invalidUrls;
+    mutable QList<QString> m_invalidPaths;
 
     // This can contain an entry multiple times - for the id, file and url
     mutable QHash<QString, AbstractEntry *> m_entries;
@@ -248,6 +251,8 @@ QString KAStatsFavoritesModel::description() const
 
 bool KAStatsFavoritesModel::trigger(int row, const QString &actionId, const QVariant &argument)
 {
+    qDebug() << "Trigger: " << row << actionId << argument << "<@>---------< <";
+
     // Do not allow triggering an item while another one is being dropped
     if (m_dropPlaceholderIndex != -1) return false;
 
@@ -328,40 +333,36 @@ void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const QString 
 
 void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &activity, int index)
 {
-    qDebug() << "";
-    qDebug() << "Add favorite to" << id << activity << index << " <================###=";
+    if (id.isEmpty()) return;
 
     if (index == -1) {
         index = d->rowCount();
-        qDebug() << "    changed to " << index << " <---------";
     }
+
+    qDebug() << "";
+    qDebug() << "Add favorite to" << id << activity << index << " <================###=";
 
     setDropPlaceholderIndex(-1);
 
-    if (id.isEmpty()) return;
-
-    const auto url = d->urlForId(id);
-
-    qDebug() << "    url " << url << " <---------";
+    const auto path = d->pathForId(id);
 
     // This is a file, we want to check that it exists
-    if (url.isLocalFile() && !QFileInfo::exists(url.toLocalFile())) return;
+    // if (url.isLocalFile() && !QFileInfo::exists(url.toLocalFile())) return;
 
     qDebug() << "Calling to link to the activity:"
-             << url << activity << agentForScheme(url.scheme())
+             << path << activity << agentForPath(path)
              << " <---------";
-    d->linkToActivity(
-            url, activity,
-            Agent(agentForScheme(url.scheme()))
-        );
+    d->linkToActivity(QUrl(path), activity,
+                      Agent(agentForPath(path)));
 
     // Lets handle async repositioning of the item, see ::data
-    qDebug() << "    index - where the item is being dropped" << m_whereTheItemIsBeingDropped << " <---------";
+    qDebug() << "    index - where the item is being dropped"
+             << m_whereTheItemIsBeingDropped << " <---------";
     m_whereTheItemIsBeingDropped = index;
 
     if (index != -1) {
-        qDebug() << "    which item is being dropped" << url.toLocalFile() << " <---------";
-        m_whichIdIsBeingDropped = url.toLocalFile();
+        qDebug() << "    which item is being dropped" << path << " <---------";
+        m_whichIdIsBeingDropped = path;
     } else {
         m_whichIdIsBeingDropped.clear();
     }
@@ -369,20 +370,21 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
 
 void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const Activity &activity)
 {
-    const auto url = d->urlForId(id);
+    const auto path = d->pathForId(id);
+
+    qDebug() << "Removing favorite from: " << id << path << activity;
 
     d->unlinkFromActivity(
-            url, activity,
-            Agent(agentForScheme(url.scheme()))
+            QUrl(path), activity,
+            Agent(agentForPath(path))
         );
 }
 
 void KAStatsFavoritesModel::moveRow(int from, int to)
 {
-    const QString id =
-        data(index(from, 0), Kicker::UrlRole).toString();
+    const auto id = data(index(from, 0), Kicker::UrlRole).toString();
 
-    d->setResultPosition(d->urlForId(id).toLocalFile(), to);
+    d->setResultPosition(d->pathForId(id), to);
 }
 
 AbstractModel *KAStatsFavoritesModel::favoritesModel()
@@ -409,15 +411,11 @@ QString KAStatsFavoritesModel::activityNameForId(const QString &activityId) cons
 
 QStringList KAStatsFavoritesModel::linkedActivitiesFor(const QString &id) const
 {
-    auto url = d->urlForId(id);
+    const auto path = d->pathForId(id);
 
-    if (!url.isValid()) {
+    if (path.isEmpty()) {
         return {};
     }
-
-    auto urlString =
-        url.scheme() == "file" ?
-            url.toLocalFile() : url.toString();
 
     auto query = LinkedResources
                     | Agent {
@@ -426,7 +424,7 @@ QStringList KAStatsFavoritesModel::linkedActivitiesFor(const QString &id) const
                       }
                     | Type::any()
                     | Activity::any()
-                    | Url(urlString);
+                    | Url(path);
 
     ResultSet results(query);
 

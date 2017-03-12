@@ -56,6 +56,7 @@ Item {
         id: actionMenu
 
         onActionClicked: {
+            console.log(actionId + "<------------------ this is the id");
             actionTriggered(actionId, actionArgument);
         }
     }

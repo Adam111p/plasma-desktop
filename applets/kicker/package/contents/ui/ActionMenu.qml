@@ -29,7 +29,7 @@ Item {
     property Item visualParent
     property variant actionList
 
-    signal actionClicked(string actionId)
+    signal actionClicked(string actionId, variant actionArgument)
 
     onActionListChanged: refreshMenu();
 
@@ -115,7 +115,7 @@ Item {
             checked   : actionItem.checked ? actionItem.checked : false
 
             onClicked: {
-                actionClicked(actionItem.actionId);
+                actionClicked(actionItem.actionId, actionItem.actionArgument);
             }
         }
     }

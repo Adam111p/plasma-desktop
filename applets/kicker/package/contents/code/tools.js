@@ -57,6 +57,7 @@ function createFavoriteActions(favoriteModel, favoriteId) {
             action.icon = "bookmark-new";
             action.actionId = "_kicker_favorite_add";
         } else {
+            console.log("Returning null <---------------------")
             return null;
         }
 
@@ -136,6 +137,14 @@ function createFavoriteActions(favoriteModel, favoriteId) {
 
         activities.forEach(function(activityId) {
             addActivityItem(activityId, favoriteModel.activityNameForId(activityId));
+        });
+
+        actions.forEach(function(action) {
+            for (var property in action) {
+                console.log("prop: " + property);
+                console.log("prop: " + action[property]);
+            }
+            console.log(action + "<================ actions");
         });
 
         return [{
