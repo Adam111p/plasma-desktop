@@ -64,15 +64,12 @@ public:
         const auto url = entry && entry->isValid() ? entry->url()
                                                    : QUrl();
 
-        qDebug() << "pathForId - id = " << id << " url = " << url;
-
         // We want to resolve symbolic links not to have two paths
         // refer to the same .desktop file
         if (url.isLocalFile()) {
             QFileInfo file(url.toLocalFile());
 
             if (file.exists()) {
-                qDebug() << "    <-----" << file.canonicalFilePath();
                 return file.canonicalFilePath();
             }
         }
@@ -91,14 +88,10 @@ public:
         if (!m_entries.contains(id)) {
             AbstractEntry *entry = nullptr;
 
-            qDebug() << "Creating entry for: " << id;
-
             if (QUrl(id).scheme() == "ktp") {
                 entry = new ContactEntry(q, id);
-                qDebug() << "ContactEntry" << entry->id() << entry->url();
             } else {
                 entry = new AppEntry(q, id);
-                qDebug() << "AppEntry" << entry->id() << entry->url();
             }
 
             if (!entry->isValid()) return nullptr;
@@ -250,8 +243,6 @@ QString KAStatsFavoritesModel::description() const
 
 bool KAStatsFavoritesModel::trigger(int row, const QString &actionId, const QVariant &argument)
 {
-    qDebug() << "Trigger: " << row << actionId << argument << "<@>---------< <";
-
     // Do not allow triggering an item while another one is being dropped
     if (m_dropPlaceholderIndex != -1) return false;
 
@@ -334,9 +325,6 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
 {
     if (id.isEmpty()) return;
 
-    qDebug() << "";
-    qDebug() << "Add favorite to" << id << activity << index << " <================###=";
-
     setDropPlaceholderIndex(-1);
 
     const auto path = d->pathForId(id);
@@ -344,9 +332,6 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
     // This is a file, we want to check that it exists
     // if (url.isLocalFile() && !QFileInfo::exists(url.toLocalFile())) return;
 
-    qDebug() << "Calling to link to the activity:"
-             << path << activity << agentForPath(path)
-             << " <---------";
     d->linkToActivity(QUrl(path), activity,
                       Agent(agentForPath(path)));
 
@@ -358,8 +343,6 @@ void KAStatsFavoritesModel::addFavoriteTo(const QString &id, const Activity &act
 void KAStatsFavoritesModel::removeFavoriteFrom(const QString &id, const Activity &activity)
 {
     const auto path = d->pathForId(id);
-
-    qDebug() << "Removing favorite from: " << id << path << activity;
 
     d->unlinkFromActivity(
             QUrl(path), activity,
