@@ -63,8 +63,8 @@ AbstractModel *GroupEntry::childModel() const
 }
 
 RootModel::RootModel(QObject *parent) : AppsModel(QString(), parent)
-, m_favorites(new KAStatsFavoritesModel(this))
 , m_complete(false)
+, m_favorites(new KAStatsFavoritesModel(this))
 , m_systemModel(nullptr)
 , m_autoPopulate(true)
 , m_showAllApps(false)
