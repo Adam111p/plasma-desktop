@@ -36,6 +36,7 @@
 #include <KRun>
 #include <KService>
 #include <KStartupInfo>
+#include <QDebug>
 
 #include <KActivities/Stats/Cleaning>
 #include <KActivities/Stats/ResultModel>
@@ -46,7 +47,7 @@ namespace KAStats = KActivities::Stats;
 using namespace KAStats;
 using namespace KAStats::Terms;
 
-GroupSortProxy::GroupSortProxy(QAbstractItemModel *sourceModel) : QSortFilterProxyModel(nullptr)
+GroupSortProxy::GroupSortProxy(QAbstractItemModel *sourceModel) : QSortFilterProxyModel(sourceModel)
 {
     sourceModel->setParent(this);
     setSourceModel(sourceModel);
@@ -55,13 +56,20 @@ GroupSortProxy::GroupSortProxy(QAbstractItemModel *sourceModel) : QSortFilterPro
 
 GroupSortProxy::~GroupSortProxy()
 {
+    qDebug() << "Killing group sort proxy";
 }
 
-InvalidAppsFilterProxy::InvalidAppsFilterProxy(AbstractModel *parentModel, QAbstractItemModel *sourceModel) : QSortFilterProxyModel(nullptr)
+// #define TURN_ON_FAV_FILTER
+
+InvalidAppsFilterProxy::InvalidAppsFilterProxy(AbstractModel *parentModel, QAbstractItemModel *sourceModel) : QSortFilterProxyModel(sourceModel)
+#ifdef TURN_ON_FAV_FILTER
 , m_parentModel(parentModel)
+#endif
 {
+#ifdef TURN_ON_FAV_FILTER
     connect(parentModel, &AbstractModel::favoritesModelChanged, this, &InvalidAppsFilterProxy::connectNewFavoritesModel);
     connectNewFavoritesModel();
+#endif
 
     sourceModel->setParent(this);
     setSourceModel(sourceModel);
@@ -69,14 +77,17 @@ InvalidAppsFilterProxy::InvalidAppsFilterProxy(AbstractModel *parentModel, QAbst
 
 InvalidAppsFilterProxy::~InvalidAppsFilterProxy()
 {
+    qDebug() << "Killing invalid apps filter proxy";
 }
 
 void InvalidAppsFilterProxy::connectNewFavoritesModel()
 {
+#ifdef TURN_ON_FAV_FILTER
     FavoritesModel* favoritesModel = static_cast<FavoritesModel *>(m_parentModel->favoritesModel());
     connect(favoritesModel, &FavoritesModel::favoritesChanged, this, &QSortFilterProxyModel::invalidate);
 
     invalidate();
+#endif
 }
 
 bool InvalidAppsFilterProxy::filterAcceptsRow(int source_row, const QModelIndex &source_parent) const
@@ -88,9 +99,13 @@ bool InvalidAppsFilterProxy::filterAcceptsRow(int source_row, const QModelIndex 
     if (resource.startsWith(QLatin1String("applications:"))) {
         KService::Ptr service = KService::serviceByStorageId(resource.section(':', 1));
 
+        #ifdef TURN_ON_FAV_FILTER
         FavoritesModel* favoritesModel = m_parentModel ? static_cast<FavoritesModel *>(m_parentModel->favoritesModel()) : nullptr;
 
         return (service && (!favoritesModel || !favoritesModel->isFavorite(service->storageId())));
+        #endif
+
+        return service;
     }
 
     return true;
@@ -397,7 +412,10 @@ int RecentUsageModel::ordering() const
 
 void RecentUsageModel::refresh()
 {
-    QAbstractItemModel *oldModel = sourceModel();
+    qDebug() << this << "RecentUsageModel::refresh() called";
+
+    setSourceModel(nullptr);
+    delete m_activitiesModel;
 
     auto query = UsedResources
                     | (m_ordering == Recent ? RecentlyUsedFirst : HighScoredFirst)
@@ -441,6 +459,4 @@ void RecentUsageModel::refresh()
     }
 
     setSourceModel(model);
-
-    delete oldModel;
 }

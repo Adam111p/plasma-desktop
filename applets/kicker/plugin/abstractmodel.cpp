@@ -20,6 +20,8 @@
 #include "abstractmodel.h"
 #include "actionlist.h"
 
+#include <QDebug>
+
 AbstractModel::AbstractModel(QObject *parent) : QAbstractListModel(parent)
 , m_favoritesModel(nullptr)
 , m_iconSize(32)
