@@ -59,7 +59,7 @@ GroupSortProxy::~GroupSortProxy()
     qDebug() << "Killing group sort proxy";
 }
 
-// #define TURN_ON_FAV_FILTER
+#define TURN_ON_FAV_FILTER
 
 InvalidAppsFilterProxy::InvalidAppsFilterProxy(AbstractModel *parentModel, QAbstractItemModel *sourceModel) : QSortFilterProxyModel(sourceModel)
 #ifdef TURN_ON_FAV_FILTER
@@ -131,8 +131,8 @@ RecentUsageModel::RecentUsageModel(QObject *parent, IncludeUsage usage, int orde
 : ForwardingModel(parent)
 , m_usage(usage)
 , m_ordering((Ordering)ordering)
+, m_complete(false)
 {
-    refresh();
 }
 
 RecentUsageModel::~RecentUsageModel()
@@ -410,9 +410,24 @@ int RecentUsageModel::ordering() const
     return m_ordering;
 }
 
+void RecentUsageModel::classBegin()
+{
+}
+
+void RecentUsageModel::componentComplete()
+{
+    m_complete = true;
+
+    refresh();
+}
+
 void RecentUsageModel::refresh()
 {
     qDebug() << this << "RecentUsageModel::refresh() called";
+
+    if (!m_complete) {
+        return;
+    }
 
     setSourceModel(nullptr);
     delete m_activitiesModel;
